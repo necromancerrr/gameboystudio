@@ -1,0 +1,65 @@
+@import "tailwindcss";
+
+/**
+ * Design tokens for D-009: DMG-derived neutrals as the foundation, the green
+ * LCD palette reserved as an accent. The interface is dark-first — game
+ * screenshots supply the colour, so the surround stays quiet.
+ */
+:root {
+  /* Warm-neutral greys pulled toward the DMG shell rather than pure black. */
+  --gbs-bg: #0e0f0e;
+  --gbs-surface: #161816;
+  --gbs-surface-raised: #1d201d;
+  --gbs-border: #282b28;
+  --gbs-border-strong: #3a3e39;
+  --gbs-text: #e9eae7;
+  --gbs-text-muted: #9a9e98;
+  --gbs-text-faint: #6c706b;
+
+  /* Original DMG LCD greens. Accent only — never page chrome. */
+  --gbs-lcd: #9bbc0f;
+  --gbs-lcd-dim: #8bac0f;
+  --gbs-lcd-deep: #306230;
+  --gbs-lcd-shadow: #0f380f;
+}
+
+@theme inline {
+  --color-background: var(--gbs-bg);
+  --color-foreground: var(--gbs-text);
+  --color-surface: var(--gbs-surface);
+  --color-surface-raised: var(--gbs-surface-raised);
+  --color-hairline: var(--gbs-border);
+  --color-hairline-strong: var(--gbs-border-strong);
+  --color-muted: var(--gbs-text-muted);
+  --color-faint: var(--gbs-text-faint);
+  --color-lcd: var(--gbs-lcd);
+  --color-lcd-deep: var(--gbs-lcd-deep);
+  --color-lcd-shadow: var(--gbs-lcd-shadow);
+
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+body {
+  background: var(--gbs-bg);
+  color: var(--gbs-text);
+}
+
+/* Game Boy output is 160x144. Every screen-derived image keeps that ratio. */
+.aspect-gb {
+  aspect-ratio: 10 / 9;
+}
+
+/* Screenshots are tiny pixel art; never let the browser smooth them. */
+.pixelated {
+  image-rendering: pixelated;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
