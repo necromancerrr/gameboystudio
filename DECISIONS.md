@@ -404,6 +404,44 @@ Consequences:
   input bugs — event `code` matching, focus scoping, capture phase — while the
   actual cause sat one layer below, because the layer below had a green test.
 
+## D-013: Battery Saves In localStorage
+
+Status: Accepted — verified 2026-08-08
+
+Decision:
+Persist battery-backed cartridge RAM to `localStorage`, keyed per game, written
+on a short debounce after the cartridge reports a write.
+
+Context:
+14 of the 20 catalog games have battery RAM, including Aevilia (128K, an RPG).
+Without persistence, closing the tab discarded all progress, which made part of
+the existing catalog effectively pointless.
+
+Reason for localStorage:
+- Saves are 2K–128K; well within quota even for the whole catalog.
+- No backend, per project scope.
+- Synchronous read on mount means the save is in place before the first frame.
+
+Behaviour:
+- `_emulator_was_ext_ram_updated` drives an `onBatteryDirty` callback; the write
+  is debounced 700ms because games write in bursts.
+- Pending writes are flushed on unmount, `pagehide`, and `visibilitychange`, so
+  closing or backgrounding the tab does not lose the last burst.
+- A save whose size does not match the cartridge's RAM is rejected rather than
+  partially applied — that combination means the save belongs to another game.
+- Reset preserves the save, matching what the reset button does on real
+  hardware, which is why the adapter retains it and reapplies after re-creating
+  the core.
+- The player shows a brief "saved" indicator, and "save failed" if the quota is
+  exceeded, rather than failing silently.
+
+Consequences:
+- Saves are per-browser and per-origin. Clearing site data loses them, and there
+  is no sync between devices. Acceptable while there is no backend.
+- `reset()` now creates a fresh WASM module, like `loadGame` does. It had been
+  reusing the existing one, which is exactly the pattern D-006 warns about; it
+  survived only by accident until ext-RAM allocations made it trap.
+
 ## Template For Future Decisions
 
 ### D-XXX: Decision Name

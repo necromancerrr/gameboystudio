@@ -31,6 +31,8 @@ export interface GameSource {
   /** URL the ROM is fetched from. */
   romUrl: string;
   console: ConsoleId;
+  /** Stable id for persisting this game's battery save. */
+  saveKey: string;
 }
 
 export interface EmulatorAdapter {
@@ -41,6 +43,9 @@ export interface EmulatorAdapter {
   reset(): Promise<void>;
   setButton(button: LogicalButton, pressed: boolean): void;
   setMuted(muted: boolean): void;
+  /** Battery-backed cartridge RAM, or null when the cartridge has none. */
+  readSave(): Uint8Array | null;
+  loadSave(data: Uint8Array): boolean;
   destroy(): void;
 }
 

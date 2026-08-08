@@ -55,6 +55,8 @@ export interface BinjgbAdapterOptions {
   /** Reports measured frames per second roughly once a second. */
   onFps?: (fps: number) => void;
   onError?: (error: Error) => void;
+  /** Fires when the cartridge wrote to battery RAM, i.e. the game saved. */
+  onBatteryDirty?: () => void;
 }
 
 export class BinjgbAdapter implements EmulatorAdapter {
@@ -63,6 +65,13 @@ export class BinjgbAdapter implements EmulatorAdapter {
   private readonly imageData: ImageData;
   private readonly onFps?: (fps: number) => void;
   private readonly onError?: (error: Error) => void;
+  private readonly onBatteryDirty?: () => void;
+
+  /**
+   * Retained so a reset restores the save, the way pressing reset on real
+   * hardware leaves the cartridge's battery RAM intact.
+   */
+  private pendingSave: Uint8Array | null = null;
 
   private module: BinjgbModule | null = null;
   private handle = 0;
@@ -88,6 +97,7 @@ export class BinjgbAdapter implements EmulatorAdapter {
     this.canvas = options.canvas;
     this.onFps = options.onFps;
     this.onError = options.onError;
+    this.onBatteryDirty = options.onBatteryDirty;
 
     this.canvas.width = SCREEN_WIDTH;
     this.canvas.height = SCREEN_HEIGHT;
@@ -148,6 +158,8 @@ export class BinjgbAdapter implements EmulatorAdapter {
     // to, so every press is silently dropped and the game appears unplayable.
     this.joypadPtr = wasm._joypad_new();
     wasm._emulator_set_default_joypad_callback(handle, this.joypadPtr);
+
+    if (this.pendingSave) this.loadSave(this.pendingSave);
     this.frameBuffer = new Uint8Array(
       wasm.HEAP8.buffer,
       wasm._get_frame_buffer_ptr(handle),
@@ -194,6 +206,11 @@ export class BinjgbAdapter implements EmulatorAdapter {
     const wasRunning = this.running;
     this.pause();
 
+    // Pressing reset on real hardware leaves the cartridge's battery RAM
+    // intact, so carry the save across.
+    const save = this.readSave();
+    if (save) this.pendingSave = save;
+
     // Re-read the ROM straight out of WASM memory so reset needs no refetch.
     const rom = new Uint8Array(
       this.module.HEAP8.buffer.slice(
@@ -202,6 +219,13 @@ export class BinjgbAdapter implements EmulatorAdapter {
       ),
     );
     this.teardownCore();
+
+    // A fresh module, for the same reason loadGame uses one: building a second
+    // emulator inside a module that has already had one torn down corrupts the
+    // core and traps on the next allocation.
+    this.module = await createBinjgbModule();
+    if (this.destroyed) return;
+
     this.instantiate(rom.buffer as ArrayBuffer);
     this.audioStartSec = 0;
     if (wasRunning) this.start();
@@ -215,6 +239,56 @@ export class BinjgbAdapter implements EmulatorAdapter {
 
   setMuted(muted: boolean): void {
     this.muted = muted;
+  }
+
+  /**
+   * Runs `body` against a freshly allocated ext-RAM file buffer, always freeing
+   * it afterwards. Every ext-RAM operation goes through this so a throw can't
+   * leak WASM memory.
+   */
+  private withExtRamBuffer<T>(
+    body: (fileDataPtr: number, buffer: Uint8Array) => T,
+  ): T | null {
+    const wasm = this.module;
+    if (!wasm || !this.handle) return null;
+    const fileDataPtr = wasm._ext_ram_file_data_new(this.handle);
+    if (!fileDataPtr) return null;
+    try {
+      const buffer = new Uint8Array(
+        wasm.HEAP8.buffer,
+        wasm._get_file_data_ptr(fileDataPtr),
+        wasm._get_file_data_size(fileDataPtr),
+      );
+      return body(fileDataPtr, buffer);
+    } finally {
+      wasm._file_data_delete(fileDataPtr);
+    }
+  }
+
+  readSave(): Uint8Array | null {
+    const wasm = this.module;
+    if (!wasm) return null;
+    return this.withExtRamBuffer((fileDataPtr, buffer) => {
+      if (buffer.byteLength === 0) return null;
+      wasm._emulator_write_ext_ram(this.handle, fileDataPtr);
+      // Copy out: the view points into WASM memory that is about to be freed.
+      return new Uint8Array(buffer);
+    });
+  }
+
+  loadSave(data: Uint8Array): boolean {
+    const wasm = this.module;
+    if (!wasm || data.byteLength === 0) return false;
+    this.pendingSave = data;
+    return (
+      this.withExtRamBuffer((fileDataPtr, buffer) => {
+        // A size mismatch means the save belongs to a different cartridge.
+        if (buffer.byteLength !== data.byteLength) return false;
+        buffer.set(data);
+        wasm._emulator_read_ext_ram(this.handle, fileDataPtr);
+        return true;
+      }) ?? false
+    );
   }
 
   destroy(): void {
@@ -293,6 +367,10 @@ export class BinjgbAdapter implements EmulatorAdapter {
         if (event & EVENT_AUDIO_BUFFER_FULL) this.pushAudio();
         if (event & EVENT_UNTIL_TICKS) break;
         if (!(event & (EVENT_NEW_FRAME | EVENT_AUDIO_BUFFER_FULL))) break;
+      }
+      // The flag is cleared by reading it, so check once per batch.
+      if (wasm._emulator_was_ext_ram_updated(this.handle)) {
+        this.onBatteryDirty?.();
       }
     } catch (error) {
       this.running = false;

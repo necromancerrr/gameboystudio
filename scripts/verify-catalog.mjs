@@ -116,4 +116,59 @@ for (const testCase of INPUT_CASES) {
 }
 console.log(`${inputPass}/${INPUT_CASES.length} respond to input`);
 
+/**
+ * Battery saves: a save must survive being written out and read back, and a
+ * save sized for a different cartridge must be rejected rather than partially
+ * applied. Mirrors BinjgbAdapter.readSave / loadSave.
+ */
+const BATTERY_TYPES = new Set([0x03, 0x06, 0x09, 0x0d, 0x0f, 0x10, 0x13, 0x1b, 0x1e, 0x22, 0xff]);
+
+function withExtRam(mod, e, body) {
+  const fd = mod._ext_ram_file_data_new(e);
+  if (!fd) return null;
+  try {
+    const buf = new Uint8Array(mod.HEAP8.buffer, mod._get_file_data_ptr(fd), mod._get_file_data_size(fd));
+    return body(fd, buf);
+  } finally { mod._file_data_delete(fd); }
+}
+
+console.log('\nBattery saves:');
+let saveChecked = 0;
+let savePass = 0;
+for (const game of games) {
+  const rom = fs.readFileSync(`${REPO}/public${game.romPath}`);
+  if (!BATTERY_TYPES.has(rom[0x147])) continue;
+
+  const mod = await sandbox.__Binjgb({ wasmBinary });
+  const size = (rom.byteLength + 0x7fff) & ~0x7fff;
+  const ptr = mod._malloc(size);
+  new Uint8Array(mod.HEAP8.buffer, ptr, size).fill(0).set(rom);
+  const e = mod._emulator_new_simple(ptr, size, 44100, 4096, 2);
+
+  const ramSize = withExtRam(mod, e, (_fd, buf) => buf.byteLength) ?? 0;
+  if (ramSize === 0) continue;
+  saveChecked += 1;
+
+  const pattern = new Uint8Array(ramSize);
+  for (let i = 0; i < ramSize; i += 1) pattern[i] = (i * 7 + 13) & 0xff;
+
+  withExtRam(mod, e, (fd, buf) => { buf.set(pattern); mod._emulator_read_ext_ram(e, fd); });
+  const readBack = withExtRam(mod, e, (fd, buf) => {
+    mod._emulator_write_ext_ram(e, fd);
+    return new Uint8Array(buf);
+  });
+
+  const intact = readBack && readBack.length === ramSize && readBack.every((v, i) => v === pattern[i]);
+  const rejectsMismatch = withExtRam(mod, e, (_fd, buf) => buf.byteLength !== ramSize + 16);
+
+  if (intact && rejectsMismatch) {
+    console.log(`  ok   ${game.slug.padEnd(24)} ${(ramSize / 1024).toFixed(0)}K round-trips`);
+    savePass += 1;
+  } else {
+    console.log(`  FAIL ${game.slug.padEnd(24)} save did not round-trip`);
+    failures.push(`${game.slug} (save)`);
+  }
+}
+console.log(`${savePass}/${saveChecked} battery saves round-trip`);
+
 if (failures.length) { console.log('\nfailed:', failures.join(', ')); process.exit(1); }

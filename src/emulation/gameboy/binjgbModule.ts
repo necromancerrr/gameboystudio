@@ -42,6 +42,19 @@ export interface BinjgbModule {
   _joypad_delete(joypadPtr: number): void;
   _emulator_set_default_joypad_callback(e: number, joypadPtr: number): void;
 
+  /**
+   * Battery-backed cartridge RAM. Names are from the core's point of view:
+   * `write_ext_ram` copies the save OUT into the buffer, `read_ext_ram` loads
+   * a save IN from it.
+   */
+  _ext_ram_file_data_new(e: number): number;
+  _get_file_data_ptr(fileDataPtr: number): number;
+  _get_file_data_size(fileDataPtr: number): number;
+  _file_data_delete(fileDataPtr: number): void;
+  _emulator_write_ext_ram(e: number, fileDataPtr: number): void;
+  _emulator_read_ext_ram(e: number, fileDataPtr: number): void;
+  _emulator_was_ext_ram_updated(e: number): number;
+
   _get_frame_buffer_ptr(e: number): number;
   _get_frame_buffer_size(e: number): number;
   _get_audio_buffer_ptr(e: number): number;

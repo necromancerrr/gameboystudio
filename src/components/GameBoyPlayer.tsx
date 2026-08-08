@@ -10,6 +10,7 @@ import { BinjgbAdapter } from '@/emulation/gameboy/BinjgbAdapter';
 import { SCREEN_HEIGHT, SCREEN_WIDTH, type GameSource } from '@/emulation/core/types';
 import { bindKeyboard } from '@/input/keyboard';
 import { bindGamepad, type GamepadInfo } from '@/input/gamepad';
+import { readSave, writeSave } from '@/emulation/core/saveStorage';
 
 type Status = 'loading' | 'ready' | 'error';
 
@@ -23,7 +24,7 @@ export function GameBoyPlayer({ source, title }: GameBoyPlayerProps) {
   // inline, so its identity changes on every render — keying the effect on it
   // would tear down and rebuild the emulator each time state updates, which
   // thrashes WASM allocations badly enough to trap.
-  const { romUrl, console: consoleId } = source;
+  const { romUrl, console: consoleId, saveKey } = source;
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const stageRef = useRef<HTMLDivElement>(null);
@@ -43,12 +44,32 @@ export function GameBoyPlayer({ source, title }: GameBoyPlayerProps) {
   // which separates "keys not arriving" from "keys arriving but mapped wrong".
   const [keyActive, setKeyActive] = useState(false);
   const keyPulseRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [saveState, setSaveState] = useState<'idle' | 'saved' | 'failed'>('idle');
+  const savePulseRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
 
     let cancelled = false;
+    let saveTimer: ReturnType<typeof setTimeout> | null = null;
+
+    // Games write to battery RAM in bursts, so debounce rather than writing
+    // localStorage on every dirty frame.
+    const flushSave = () => {
+      if (saveTimer) {
+        clearTimeout(saveTimer);
+        saveTimer = null;
+      }
+      const data = adapterRef.current?.readSave();
+      if (!data || data.byteLength === 0) return;
+      const result = writeSave(saveKey, data);
+      if (cancelled) return;
+      setSaveState(result.ok ? 'saved' : 'failed');
+      if (savePulseRef.current) clearTimeout(savePulseRef.current);
+      savePulseRef.current = setTimeout(() => setSaveState('idle'), 1600);
+    };
+
     const adapter = new BinjgbAdapter({
       canvas,
       onFps: (value) => {
@@ -58,6 +79,10 @@ export function GameBoyPlayer({ source, title }: GameBoyPlayerProps) {
         if (cancelled) return;
         setStatus('error');
         setErrorMessage(error.message);
+      },
+      onBatteryDirty: () => {
+        if (saveTimer) clearTimeout(saveTimer);
+        saveTimer = setTimeout(flushSave, 700);
       },
     });
     adapterRef.current = adapter;
@@ -95,10 +120,19 @@ export function GameBoyPlayer({ source, title }: GameBoyPlayerProps) {
       },
     });
 
+    // A pending debounce would be lost if the tab is closed or backgrounded.
+    const flushOnHide = () => {
+      if (saveTimer) flushSave();
+    };
+    window.addEventListener('pagehide', flushOnHide);
+    document.addEventListener('visibilitychange', flushOnHide);
+
     adapter
-      .loadGame({ romUrl, console: consoleId })
+      .loadGame({ romUrl, console: consoleId, saveKey })
       .then(() => {
         if (cancelled) return;
+        const existing = readSave(saveKey);
+        if (existing) adapter.loadSave(existing);
         setStatus('ready');
         adapter.start();
       })
@@ -110,15 +144,20 @@ export function GameBoyPlayer({ source, title }: GameBoyPlayerProps) {
 
     // Runs on unmount and on StrictMode's immediate second pass.
     return () => {
+      // Write before teardown, otherwise navigating away loses the last burst.
+      if (saveTimer) flushSave();
       cancelled = true;
+      window.removeEventListener('pagehide', flushOnHide);
+      document.removeEventListener('visibilitychange', flushOnHide);
       if (padPulseRef.current) clearTimeout(padPulseRef.current);
       if (keyPulseRef.current) clearTimeout(keyPulseRef.current);
+      if (savePulseRef.current) clearTimeout(savePulseRef.current);
       unbindKeyboard();
       unbindGamepad();
       adapter.destroy();
       adapterRef.current = null;
     };
-  }, [romUrl, consoleId]);
+  }, [romUrl, consoleId, saveKey]);
 
   // Side effects stay OUT of the state updater. React double-invokes updaters
   // in development, which fired pause() and resume() back to back and left the
@@ -212,6 +251,18 @@ export function GameBoyPlayer({ source, title }: GameBoyPlayerProps) {
           >
             {paused ? 'paused' : `${fps.toFixed(0)} fps`}
             {keyActive ? ' · key' : ''}
+          </span>
+        ) : null}
+        {saveState !== 'idle' ? (
+          <span
+            data-testid="save-status"
+            data-save-state={saveState}
+            className={[
+              'ml-2 font-mono',
+              saveState === 'saved' ? 'text-lcd' : 'text-red-400',
+            ].join(' ')}
+          >
+            {saveState === 'saved' ? '· saved' : '· save failed'}
           </span>
         ) : null}
       </p>

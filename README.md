@@ -3,6 +3,8 @@
 Play Game Boy and Game Boy Color homebrew in the browser. Pick a game, it starts
 immediately — no ROM upload, no plugin, keyboard or controller.
 
+**Live: https://gameboy-jet.vercel.app**
+
 ## Status
 
 The core loop works: **discover → open → connect controller → play**.
@@ -10,6 +12,7 @@ The core loop works: **discover → open → connect controller → play**.
 - 20 games (12 Game Boy, 8 Game Boy Color)
 - Real emulation via [binjgb](https://github.com/binji/binjgb) compiled to WebAssembly
 - Keyboard and Gamepad API input
+- Battery saves persist across reloads (14 of the 20 games have save RAM)
 - Pause, reset, mute, fullscreen
 
 ## Getting started
@@ -27,7 +30,14 @@ Then open http://localhost:3000.
 | --- | --- |
 | `npm run dev` | Development server |
 | `npm run build` | Production build |
-| `npm run verify:catalog` | Boots every ROM through binjgb and fails if one doesn't render |
+| `npm run verify:catalog` | Boots every ROM, checks input reaches the core, and round-trips every battery save |
+
+## Saves
+
+Games with battery-backed cartridge RAM save automatically; a brief "saved"
+appears under the player. Saves live in `localStorage`, keyed per game, so they
+are per-browser and lost if you clear site data. Reset keeps the save, the way
+the reset button does on real hardware.
 
 ## Controls
 

@@ -47,7 +47,11 @@ export default async function GamePage({
 
       <div className="mt-6">
         <GameBoyPlayer
-          source={{ romUrl: game.romPath, console: game.console }}
+          source={{
+            romUrl: game.romPath,
+            console: game.console,
+            saveKey: game.slug,
+          }}
           title={game.title}
         />
       </div>
