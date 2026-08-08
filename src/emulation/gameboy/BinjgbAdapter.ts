@@ -66,6 +66,7 @@ export class BinjgbAdapter implements EmulatorAdapter {
 
   private module: BinjgbModule | null = null;
   private handle = 0;
+  private joypadPtr = 0;
   private romDataPtr = 0;
   private romSize = 0;
   private frameBuffer: Uint8Array | null = null;
@@ -142,6 +143,11 @@ export class BinjgbAdapter implements EmulatorAdapter {
     this.handle = handle;
     this.romDataPtr = ptr;
     this.romSize = size;
+
+    // Without this the core never reads the joypad buffer that setButton writes
+    // to, so every press is silently dropped and the game appears unplayable.
+    this.joypadPtr = wasm._joypad_new();
+    wasm._emulator_set_default_joypad_callback(handle, this.joypadPtr);
     this.frameBuffer = new Uint8Array(
       wasm.HEAP8.buffer,
       wasm._get_frame_buffer_ptr(handle),
@@ -228,6 +234,10 @@ export class BinjgbAdapter implements EmulatorAdapter {
     if (this.handle) {
       wasm._emulator_delete(this.handle);
       this.handle = 0;
+    }
+    if (this.joypadPtr) {
+      wasm._joypad_delete(this.joypadPtr);
+      this.joypadPtr = 0;
     }
     if (this.romDataPtr) {
       wasm._free(this.romDataPtr);

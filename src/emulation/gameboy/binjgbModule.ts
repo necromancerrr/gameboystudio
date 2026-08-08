@@ -33,6 +33,15 @@ export interface BinjgbModule {
   _emulator_run_until_f64(e: number, ticks: number): number;
   _emulator_get_ticks_f64(e: number): number;
 
+  /**
+   * Input plumbing. `set_joyp_*` writes into a joypad buffer that the core only
+   * reads once this callback is installed — without it every button press is
+   * silently discarded and the game looks unplayable.
+   */
+  _joypad_new(): number;
+  _joypad_delete(joypadPtr: number): void;
+  _emulator_set_default_joypad_callback(e: number, joypadPtr: number): void;
+
   _get_frame_buffer_ptr(e: number): number;
   _get_frame_buffer_size(e: number): number;
   _get_audio_buffer_ptr(e: number): number;

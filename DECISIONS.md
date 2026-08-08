@@ -127,6 +127,13 @@ Consequences:
   shipping, build from a pinned commit with Emscripten instead.
 - binjgb ships its own input handling and an on-screen touch gamepad. We will
   likely suppress those to keep normalization in `src/input/`.
+- **A joypad callback must be installed or all input is silently discarded.**
+  `set_joyp_*` writes into a joypad buffer that the core only reads once
+  `_emulator_set_default_joypad_callback(e, _joypad_new())` has been called.
+  Without it the games render perfectly at 60fps and respond to nothing. The
+  upstream `simple.js` installs this inside its Rewind class, so skipping rewind
+  as out-of-scope silently dropped input along with it. `_joypad_delete` on
+  teardown. See D-012 for how this went unnoticed.
 - **One module instance per emulator is mandatory.** Reusing a module across
   games traps: after `_emulator_delete` + `_free`, allocating a differently
   sized ROM corrupts the core and the next `_emulator_new_simple` dies with
@@ -360,6 +367,42 @@ Related bug fixed at the same time:
 inside a `setState` updater. React double-invokes updaters in development, so
 the two effects fired back to back and the button toggled to nowhere. Side
 effects now happen in the handler, not the updater.
+
+## D-012: Verify Playability, Not Just Rendering
+
+Status: Accepted — after shipping a catalog of unplayable games
+
+Decision:
+A game does not count as working until input has been shown to change what
+happens on screen. `npm run verify:catalog` asserts this, not just that pixels
+appear.
+
+Context:
+The joypad callback described in D-006 was missing for the entire build-out. The
+result passed every check that existed: 20/20 ROMs booted and rendered, the
+emulator held 60fps, keyboard and gamepad events reached `setButton`, and the
+activity indicators lit up. Every layer reported success. The games were
+unplayable the whole time.
+
+How it survived so long:
+- The boot test asserted "more than one colour on screen", which a title screen
+  satisfies whether or not it can be interacted with.
+- Manual checks were read too generously. Tobu Tobu Girl advances through an
+  intro and an attract-mode demo on its own, and that motion was mistaken for a
+  response to input.
+- An early A/B test looked like proof but was invalid: the "pressed" run
+  advanced 0.2s more emulated time than the control, so the screens differed for
+  reasons that had nothing to do with the button. A test that cannot fail is
+  worse than no test, because it is counted as evidence.
+
+Consequences:
+- Input assertions hold the button across an identical time window in both runs,
+  so a difference can only come from the input.
+- "It renders" is never reported as "it works" again.
+- When a user says something does not work, their observation outranks a local
+  check that says otherwise. Three rounds were spent fixing real but secondary
+  input bugs — event `code` matching, focus scoping, capture phase — while the
+  actual cause sat one layer below, because the layer below had a green test.
 
 ## Template For Future Decisions
 

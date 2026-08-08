@@ -59,4 +59,61 @@ for (const game of games) {
 }
 
 console.log(`\n${pass}/${games.length} ROMs boot and render`);
-if (failures.length) { console.log('failed:', failures.join(', ')); process.exit(1); }
+
+/**
+ * Rendering is not playability. binjgb only reads the joypad buffer that
+ * `set_joyp_*` writes to once `_emulator_set_default_joypad_callback` is
+ * installed; without it every press is silently dropped and the games look
+ * perfect but respond to nothing. This asserts input actually lands.
+ *
+ * Both runs advance identical emulated time — the only difference is whether
+ * the button is held — so a difference can only come from the input.
+ */
+async function screenAfter({ holdStart, installCallback, romPath, warmupSec, holdSec }) {
+  const mod = await sandbox.__Binjgb({ wasmBinary });
+  const rom = fs.readFileSync(`${REPO}/public${romPath}`);
+  const size = (rom.byteLength + 0x7fff) & ~0x7fff;
+  const ptr = mod._malloc(size);
+  new Uint8Array(mod.HEAP8.buffer, ptr, size).fill(0).set(rom);
+  const e = mod._emulator_new_simple(ptr, size, 44100, 4096, 2);
+
+  if (installCallback) {
+    mod._emulator_set_default_joypad_callback(e, mod._joypad_new());
+  }
+
+  const advance = (sec) => {
+    const t = mod._emulator_get_ticks_f64(e) + CPU_TICKS_PER_SECOND * sec;
+    for (;;) { if (mod._emulator_run_until_f64(e, t) & EVENT_UNTIL_TICKS) break; }
+  };
+
+  advance(warmupSec);
+  if (holdStart) mod._set_joyp_start(e, 1);
+  advance(holdSec);
+
+  const fb = new Uint8Array(mod.HEAP8.buffer, mod._get_frame_buffer_ptr(e), mod._get_frame_buffer_size(e));
+  let h = 0;
+  for (let i = 0; i < fb.length; i += 13) h = (h * 31 + fb[i]) | 0;
+  return h;
+}
+
+const INPUT_CASES = [
+  { slug: 'tobutobugirl', romPath: '/roms/tobutobugirl.gb', warmupSec: 12, holdSec: 4 },
+  { slug: 'snake', romPath: '/roms/snake.gb', warmupSec: 6, holdSec: 4 },
+];
+
+console.log('\nInput reaching the core:');
+let inputPass = 0;
+for (const testCase of INPUT_CASES) {
+  const idle = await screenAfter({ ...testCase, holdStart: false, installCallback: true });
+  const held = await screenAfter({ ...testCase, holdStart: true, installCallback: true });
+  if (idle !== held) {
+    console.log(`  ok   ${testCase.slug.padEnd(24)} START changes the screen`);
+    inputPass++;
+  } else {
+    console.log(`  FAIL ${testCase.slug.padEnd(24)} START does nothing — is the joypad callback installed?`);
+    failures.push(`${testCase.slug} (input)`);
+  }
+}
+console.log(`${inputPass}/${INPUT_CASES.length} respond to input`);
+
+if (failures.length) { console.log('\nfailed:', failures.join(', ')); process.exit(1); }
