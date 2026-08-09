@@ -3,11 +3,14 @@ import Image from 'next/image';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { GameBoyPlayer } from '@/components/GameBoyPlayer';
+import { NativePlayerMount } from '@/components/NativePlayerMount';
 import {
   CONSOLE_LABELS,
   getAllGames,
   getGameBySlug,
   getSeriesSiblings,
+  isRetro,
+  type Game,
 } from '@/catalog';
 import { GameCard } from '@/components/GameCard';
 
@@ -31,6 +34,19 @@ export async function generateMetadata({
   };
 }
 
+/**
+ * What a player needs to know before pressing play, in their words rather than
+ * the manifest's. Nothing here names a runtime.
+ */
+function playerFacts(game: Game): string[] {
+  const facts: string[] = [];
+  if (game.players.min > 1) facts.push(`${game.players.min} players`);
+  else if (game.players.max > 1) facts.push(`Up to ${game.players.max} players`);
+  if (game.saves) facts.push('Saves your progress');
+  if (!game.inputs.supported.includes('touch')) facts.push('Controller or keyboard');
+  return facts;
+}
+
 export default async function GamePage({
   params,
 }: {
@@ -42,6 +58,7 @@ export default async function GamePage({
 
   const extraShots = game.screenshots.slice(1);
   const siblings = getSeriesSiblings(game);
+  const original = !isRetro(game);
 
   return (
     <div className="mx-auto w-full max-w-4xl flex-1 px-6 py-8 sm:px-8">
@@ -53,23 +70,41 @@ export default async function GamePage({
       </Link>
 
       <div className="mt-6">
-        <GameBoyPlayer
-          source={{
-            romUrl: game.romPath,
-            console: game.console,
-            saveKey: game.slug,
-          }}
-          title={game.title}
-        />
+        {isRetro(game) ? (
+          <GameBoyPlayer
+            source={{
+              romUrl: game.entry,
+              console: game.console,
+              saveKey: game.slug,
+            }}
+            title={game.title}
+          />
+        ) : (
+          <NativePlayerMount
+            entry={game.entry}
+            slug={game.slug}
+            title={game.title}
+            players={game.players}
+            supportsTouch={game.inputs.supported.includes('touch')}
+          />
+        )}
       </div>
 
       <article className="mt-10 border-t border-hairline pt-8">
         <header>
+          {original ? (
+            <p
+              data-testid="original-badge"
+              className="mb-2 font-mono text-[11px] tracking-[0.14em] text-lcd uppercase"
+            >
+              GameBoyStudio Original
+            </p>
+          ) : null}
           <h1 className="text-2xl font-semibold tracking-tight">{game.title}</h1>
           <p className="mt-1 text-sm text-muted">
             {game.developer}
-            {game.year ? ` · ${game.year}` : ''} ·{' '}
-            {CONSOLE_LABELS[game.console]}
+            {game.year ? ` · ${game.year}` : ''}
+            {game.console ? ` · ${CONSOLE_LABELS[game.console]}` : ''}
           </p>
         </header>
 
@@ -88,11 +123,14 @@ export default async function GamePage({
               {tag}
             </li>
           ))}
-          {game.hasSave ? (
-            <li className="rounded-full border border-lcd-deep px-2.5 py-0.5 text-xs text-lcd">
-              Saves your progress
+          {playerFacts(game).map((fact) => (
+            <li
+              key={fact}
+              className="rounded-full border border-lcd-deep px-2.5 py-0.5 text-xs text-lcd"
+            >
+              {fact}
             </li>
-          ) : null}
+          ))}
         </ul>
 
         {extraShots.length > 0 ? (
@@ -134,38 +172,55 @@ export default async function GamePage({
           </div>
         ) : null}
 
-        {/* Attribution is a licence obligation for MIT and CC-BY-SA, not a nicety. */}
+        {/* Attribution is a licence obligation for MIT and CC-BY-SA, not a
+            nicety. An Original is ours, so the redistribution note that makes
+            sense for a hosted ROM would be nonsense here. */}
         <footer className="mt-10 rounded-lg border border-hairline bg-surface p-4">
-          <h2 className="text-xs font-medium tracking-wide text-faint uppercase">
-            License &amp; attribution
-          </h2>
-          <dl className="mt-3 grid gap-y-2 text-sm sm:grid-cols-[7rem_1fr]">
-            <dt className="text-muted">License</dt>
-            <dd className="font-mono text-xs text-foreground sm:text-sm">
-              {game.license}
-            </dd>
-            <dt className="text-muted">Author</dt>
-            <dd>{game.attribution}</dd>
-            {game.sourceUrl ? (
-              <>
-                <dt className="text-muted">Source</dt>
-                <dd>
-                  <a
-                    href={game.sourceUrl}
-                    target="_blank"
-                    rel="noreferrer noopener"
-                    className="break-all text-lcd underline-offset-2 hover:underline"
-                  >
-                    {game.sourceUrl}
-                  </a>
+          {original ? (
+            <>
+              <h2 className="text-xs font-medium tracking-wide text-faint uppercase">
+                About this game
+              </h2>
+              <p className="mt-3 text-sm text-muted">
+                Made by GameBoyStudio, for GameBoyStudio. It runs in the browser
+                with nothing to install and nothing to sign up for, like
+                everything else in the library.
+              </p>
+            </>
+          ) : (
+            <>
+              <h2 className="text-xs font-medium tracking-wide text-faint uppercase">
+                License &amp; attribution
+              </h2>
+              <dl className="mt-3 grid gap-y-2 text-sm sm:grid-cols-[7rem_1fr]">
+                <dt className="text-muted">License</dt>
+                <dd className="font-mono text-xs text-foreground sm:text-sm">
+                  {game.license}
                 </dd>
-              </>
-            ) : null}
-          </dl>
-          <p className="mt-3 text-xs text-faint">
-            Distributed under the terms above. GameBoyStudio hosts only ROMs
-            whose license permits redistribution.
-          </p>
+                <dt className="text-muted">Author</dt>
+                <dd>{game.attribution}</dd>
+                {game.sourceUrl ? (
+                  <>
+                    <dt className="text-muted">Source</dt>
+                    <dd>
+                      <a
+                        href={game.sourceUrl}
+                        target="_blank"
+                        rel="noreferrer noopener"
+                        className="break-all text-lcd underline-offset-2 hover:underline"
+                      >
+                        {game.sourceUrl}
+                      </a>
+                    </dd>
+                  </>
+                ) : null}
+              </dl>
+              <p className="mt-3 text-xs text-faint">
+                Distributed under the terms above. GameBoyStudio hosts only ROMs
+                whose license permits redistribution.
+              </p>
+            </>
+          )}
         </footer>
       </article>
     </div>

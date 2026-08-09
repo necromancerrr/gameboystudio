@@ -501,6 +501,80 @@ Consequences:
 - Emulator internals are barred from player-facing UI, which means removing the
   fps counter and input indicators currently shipped in the player.
 
+## D-015: Native Runtime And GameBoyStudio Originals
+
+Status: Accepted — M3 verified 2026-08-09
+
+Decision:
+Games written for the platform implement a small first-party contract —
+`init`, `update`, `render`, with optional `serialize`, `restore`, `dispose` —
+hosted by `NativeGameRuntime`. No third-party engine. The catalog is one shared
+manifest for emulated and native titles, keyed on `runtime`.
+
+Context:
+M1 and M2 proved a person can find a Game Boy game and play it. Neither proves
+anything only this platform can do: the retro catalog cannot deliver local
+multiplayer, because link-cable play is absent from nearly all homebrew and
+unsupported by binjgb (see D-014).
+
+Options considered:
+1. Adopt an existing web engine (Phaser, PixiJS, Kaboom). Fastest to a first
+   game, and wrong for the thing being built: whatever we adopt becomes what
+   creators and generated games target later, and an engine that owns the
+   canvas and the DOM forecloses sandboxing. Also a dependency in a project
+   with three.
+2. Design a declarative game format now. That is the destination, but it cannot
+   be designed before any game has been written. These two games are the
+   research that earns it.
+3. A thin first-party contract — CHOSEN. Small enough to hold in the head,
+   ours to change, and it makes the host responsible for exactly the things
+   every game otherwise gets wrong.
+
+Reason:
+The host owns the loop, normalized per-player input, edge detection, audio
+unlock, mute, pause and when saves are read. A game supplies two methods. Both
+Originals are dependency-free, which is what proves the contract is sufficient
+rather than merely present.
+
+Consequences:
+- **BinjgbAdapter is not touched by any of this.** Its 466 lines carry the
+  joypad callback, one-module-per-emulator and heap-view fixes, and the loop
+  interleaves with them. The native runtime duplicates roughly forty lines of
+  requestAnimationFrame and delta-clamping instead. If the two loops prove
+  identical in practice, converging them is a boring refactor done when it is
+  safe — not during the milestone that introduces native games.
+- `InputRouter.set` is player-indexed and pads are assigned to slots by id, not
+  by browser index. Retro collapses every player onto one joypad, so whichever
+  controller someone picks up still drives a Game Boy game.
+- Native games use the same eight logical buttons as retro, because that is
+  what `src/input` produces today. D-014 points them at a wider gamepad
+  vocabulary; widening it is a change to the input layer, and neither planned
+  game needed it.
+- `reset()` carries the save across, mirroring D-013 — a cartridge's battery
+  survives pressing reset. A native game therefore serializes durable progress,
+  such as a best score, rather than the state of the current run.
+- The catalog's `console` becomes display metadata and `runtime` picks the
+  host. The two overlap and could drift in data, so `verify:catalog` asserts
+  they agree.
+- Native code must never load on a Game Boy page. A Server Component that
+  dynamically imports a Client Component does not code-split, so the split
+  starts on the client side of the boundary. `verify:bundles` checks the built
+  output rather than the source, matching user-visible strings because a
+  minifier renames identifiers.
+- Library art for Originals is authored, not captured. A native game has no ROM
+  to run headlessly the way retro previews are generated, and a fabricated
+  "screenshot" would be worse than an honest illustration.
+- Two-player touch is deliberately not built. Two thumb decks on one phone is
+  not a control scheme, so a two-player game on a touch-only device says so.
+
+Verification:
+`verify:native` plays both games headlessly through the runtime by reading the
+canvas draw stream, and `verify:browser` plays them in Chromium by reading
+pixels and pressing keys. Following D-012, each assertion was checked against a
+deliberately broken build: removing the delta clamp, the pressed-edge clear,
+the reset save carry, the player clamp, the slot assignment, or the dynamic
+import each breaks the check that covers it.
+
 ## Template For Future Decisions
 
 ### D-XXX: Decision Name

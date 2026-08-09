@@ -17,23 +17,46 @@ vm.createContext(sandbox);
 vm.runInContext(glue + '\n;globalThis.__Binjgb = Binjgb;', sandbox);
 const wasmBinary = fs.readFileSync(`${REPO}/public/emulator/binjgb/binjgb.wasm`);
 
-const games = fs.readFileSync(`${REPO}/src/catalog/games.ts`, 'utf8')
+const catalog = fs.readFileSync(`${REPO}/src/catalog/games.ts`, 'utf8')
   .split('\n')
   .reduce((acc, line) => {
     const slug = line.match(/^\s+slug: "(.+)",$/);
-    const rom = line.match(/^\s+romPath: "(.+)",$/);
+    const runtime = line.match(/^\s+runtime: "(.+)",$/);
+    const consoleId = line.match(/^\s+console: (?:"(.+)"|null),$/);
+    const entry = line.match(/^\s+entry: "(.+)",$/);
     if (slug) acc.push({ slug: slug[1] });
-    if (rom) acc[acc.length - 1].romPath = rom[1];
+    if (runtime) acc[acc.length - 1].runtime = runtime[1];
+    if (consoleId) acc[acc.length - 1].console = consoleId[1] ?? null;
+    if (entry) acc[acc.length - 1].entry = entry[1];
     return acc;
   }, []);
 
 let pass = 0;
 const failures = [];
 
+/**
+ * `runtime` picks the adapter and `console` is display metadata, so the two
+ * can drift apart in data. Nothing at runtime would notice — the game would
+ * simply be labelled wrong in the library — so it is asserted here.
+ */
+const CONSOLE_FOR_RUNTIME = { gb: 'GB', gbc: 'GBC', native: null };
+for (const game of catalog) {
+  if (!(game.runtime in CONSOLE_FOR_RUNTIME)) {
+    console.log(`  FAIL ${game.slug.padEnd(24)} unknown runtime "${game.runtime}"`);
+    failures.push(`${game.slug} (runtime)`);
+  } else if (game.console !== CONSOLE_FOR_RUNTIME[game.runtime]) {
+    console.log(`  FAIL ${game.slug.padEnd(24)} runtime "${game.runtime}" but console ${game.console}`);
+    failures.push(`${game.slug} (console)`);
+  }
+}
+
+// Only emulated entries have a ROM to boot. Native games verify themselves.
+const games = catalog.filter((game) => game.runtime === 'gb' || game.runtime === 'gbc');
+
 for (const game of games) {
   const mod = await sandbox.__Binjgb({ wasmBinary });
   try {
-    const rom = fs.readFileSync(`${REPO}/public${game.romPath}`);
+    const rom = fs.readFileSync(`${REPO}/public${game.entry}`);
     const size = (rom.byteLength + 0x7fff) & ~0x7fff;
     const ptr = mod._malloc(size);
     new Uint8Array(mod.HEAP8.buffer, ptr, size).fill(0).set(rom);
@@ -136,7 +159,7 @@ console.log('\nBattery saves:');
 let saveChecked = 0;
 let savePass = 0;
 for (const game of games) {
-  const rom = fs.readFileSync(`${REPO}/public${game.romPath}`);
+  const rom = fs.readFileSync(`${REPO}/public${game.entry}`);
   if (!BATTERY_TYPES.has(rom[0x147])) continue;
 
   const mod = await sandbox.__Binjgb({ wasmBinary });

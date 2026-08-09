@@ -15,9 +15,16 @@ export function GameCard({ game, priority = false }: { game: Game; priority?: bo
     >
       <div className="aspect-gb relative overflow-hidden rounded-lg border border-hairline bg-black transition-colors group-hover:border-hairline-strong">
         <GameThumb game={game} priority={priority} />
+        {/* One badge slot, two meanings: which console a game came from, or
+            that it came from us. */}
         <span className="absolute top-2 right-2 rounded bg-black/70 px-1.5 py-0.5 font-mono text-[10px] tracking-wide text-lcd backdrop-blur-sm">
-          {game.console}
+          {game.console ?? 'ORIGINAL'}
         </span>
+        {game.players.min > 1 ? (
+          <span className="absolute top-2 left-2 rounded bg-black/70 px-1.5 py-0.5 font-mono text-[10px] tracking-wide text-amber-300 backdrop-blur-sm">
+            2P
+          </span>
+        ) : null}
       </div>
 
       <div className="mt-2.5">

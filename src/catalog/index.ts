@@ -1,11 +1,16 @@
 import type { ConsoleId } from '@/emulation/core/types';
 import { GAMES } from './games';
 import previewManifest from './previews.json';
-import type { Game } from './types';
+import type { Game, GameRuntime, InputProfile, RetroGame } from './types';
 
 export { GAMES };
-export type { Game };
+export type { Game, GameRuntime, InputProfile, RetroGame };
 export { CONSOLE_LABELS } from './types';
+
+/** True for anything the emulator hosts, i.e. everything that is not native. */
+export function isRetro(game: Game): game is RetroGame {
+  return game.runtime !== 'native';
+}
 
 /** A verified gameplay loop. Only games that earned one appear here. */
 export interface GamePreviewAsset {

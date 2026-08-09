@@ -248,12 +248,15 @@ async function build(slug, romPath, recipe) {
 async function main() {
   const [mode, ...args] = process.argv.slice(2);
   const source = fs.readFileSync(`${REPO}/src/catalog/games.ts`, 'utf8');
-  const games = eval(source.slice(source.indexOf('['), source.lastIndexOf(']') + 1));
+  // Only emulated entries can be captured this way — a native game's preview
+  // comes from its own runtime, not from binjgb.
+  const games = eval(source.slice(source.indexOf('['), source.lastIndexOf(']') + 1))
+    .filter((g) => g.runtime === 'gb' || g.runtime === 'gbc');
 
   if (mode === 'probe') {
     const targets = args.length ? games.filter((g) => args.includes(g.slug)) : games;
     console.log(`probing ${targets.length} game(s)`);
-    for (const g of targets) await probe(g.slug, g.romPath);
+    for (const g of targets) await probe(g.slug, g.entry);
     return;
   }
 
@@ -272,7 +275,7 @@ async function main() {
       console.log(`  keep screenshot  ${g.slug}${recipe?.note ? ` — ${recipe.note}` : ''}`);
       continue;
     }
-    results.push(await build(g.slug, g.romPath, recipe));
+    results.push(await build(g.slug, g.entry, recipe));
   }
 
   console.log('\nslug                     mode     frames  distinct   still    loop');

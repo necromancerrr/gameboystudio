@@ -15,7 +15,8 @@ import { GameCard } from '@/components/GameCard';
 import { CONSOLE_LABELS, searchGames, type Game } from '@/catalog';
 import type { ConsoleId } from '@/emulation/core/types';
 
-type ConsoleFilter = ConsoleId | 'all';
+/** 'original' is not a console, but from the shelf it reads as one more source. */
+type ConsoleFilter = ConsoleId | 'all' | 'original';
 
 export function GameLibrary({
   games,
@@ -27,9 +28,15 @@ export function GameLibrary({
   const [query, setQuery] = useState('');
   const [console, setConsole] = useState<ConsoleFilter>('all');
 
+  const hasOriginals = useMemo(() => games.some((game) => game.console === null), [games]);
+
   const visible = useMemo(() => {
     const byConsole =
-      console === 'all' ? games : games.filter((game) => game.console === console);
+      console === 'all'
+        ? games
+        : console === 'original'
+          ? games.filter((game) => game.console === null)
+          : games.filter((game) => game.console === console);
     return searchGames(byConsole, query);
   }, [games, console, query]);
 
@@ -52,6 +59,14 @@ export function GameLibrary({
           <FilterChip active={console === 'all'} onClick={() => setConsole('all')}>
             All
           </FilterChip>
+          {hasOriginals ? (
+            <FilterChip
+              active={console === 'original'}
+              onClick={() => setConsole('original')}
+            >
+              Originals
+            </FilterChip>
+          ) : null}
           {consoles.map((id) => (
             <FilterChip
               key={id}
