@@ -23,6 +23,7 @@ import { bindGamepad, type GamepadInfo } from '@/input/gamepad';
 import { InputRouter } from '@/input/InputRouter';
 import { TouchControls } from '@/components/TouchControls';
 import { readSave, writeSave } from '@/emulation/core/saveStorage';
+import { playActivity } from '@/storage/playActivity';
 
 type Status = 'loading' | 'ready' | 'error';
 
@@ -74,6 +75,7 @@ export function GameBoyPlayer({ source, title }: GameBoyPlayerProps) {
     let saveTimer: ReturnType<typeof setTimeout> | null = null;
     let toastTimer: ReturnType<typeof setTimeout> | null = null;
     let padTimer: ReturnType<typeof setTimeout> | null = null;
+    let dwellTimer: ReturnType<typeof setTimeout> | null = null;
 
     const flushSave = () => {
       if (saveTimer) {
@@ -97,7 +99,13 @@ export function GameBoyPlayer({ source, title }: GameBoyPlayerProps) {
         saveTimer = setTimeout(flushSave, 700);
       },
       onFirstFrame: () => {
-        if (!cancelled) setBooted(true);
+        if (cancelled) return;
+        setBooted(true);
+        // Record only after a real dwell. Recording on open would fill
+        // "Continue" with games the player glanced at and backed out of.
+        dwellTimer = setTimeout(() => {
+          if (!cancelled) playActivity.record(saveKey);
+        }, 5000);
       },
     });
     adapterRef.current = adapter;
@@ -169,6 +177,7 @@ export function GameBoyPlayer({ source, title }: GameBoyPlayerProps) {
       cancelled = true;
       if (toastTimer) clearTimeout(toastTimer);
       if (padTimer) clearTimeout(padTimer);
+      if (dwellTimer) clearTimeout(dwellTimer);
       window.removeEventListener('pagehide', flushOnHide);
       document.removeEventListener('visibilitychange', flushOnHide);
       unbindKeyboard();

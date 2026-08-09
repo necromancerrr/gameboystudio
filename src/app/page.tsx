@@ -1,3 +1,4 @@
+import { ContinueShelf } from '@/components/ContinueShelf';
 import { GameLibrary } from '@/components/GameLibrary';
 import { getAllGames, getConsoles } from '@/catalog';
 
@@ -18,6 +19,10 @@ export default function LibraryPage() {
           controller, or right here on your phone.
         </p>
       </header>
+
+      {/* Above search: a returning player's intent is "resume", not "find
+          something new". Renders nothing at all on a first visit. */}
+      <ContinueShelf />
 
       <GameLibrary games={games} consoles={getConsoles()} />
 

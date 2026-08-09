@@ -67,6 +67,21 @@ export function clearSave(key: string): void {
   storage()?.removeItem(PREFIX + key);
 }
 
+/**
+ * Whether real saved progress exists — not whether the cartridge *could* save.
+ * A battery-backed game the player opened briefly has no save yet, and telling
+ * them "Continue" in that case would be a lie.
+ *
+ * Checks for the key without decoding it; saves reach 128K and this runs for
+ * every entry in the Continue shelf.
+ */
 export function hasSave(key: string): boolean {
-  return readSave(key) !== null;
+  const store = storage();
+  if (!store) return false;
+  try {
+    const raw = store.getItem(PREFIX + key);
+    return typeof raw === 'string' && raw.length > 0;
+  } catch {
+    return false;
+  }
 }
