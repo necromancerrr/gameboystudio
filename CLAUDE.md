@@ -4,7 +4,13 @@
 
 ## Project: GameBoyStudio
 
-GameBoyStudio is a web platform for discovering and playing retro games directly in the browser. The first release focuses on Game Boy and Game Boy Color. The long-term direction may expand into additional vintage systems such as NES, SNES, Sega Genesis, Game Boy Advance, and other consoles, but the first product should prove that a user can discover a game, open it, connect a controller, and actually play.
+GameBoyStudio is an instant-play gaming platform for the web, built
+controller-first. It exists to remove the distance between wanting to play
+something and actually playing it.
+
+See VISION.md and PLATFORM_DIRECTION.md for the platform direction.
+
+The first release focuses on Game Boy and Game Boy Color. The long-term direction may expand into additional vintage systems such as NES, SNES, Sega Genesis, Game Boy Advance, and other consoles, but the first product should prove that a user can discover a game, open it, connect a controller, and actually play.
 
 This repository should be treated as a product, not as an emulator demo.
 
@@ -41,6 +47,9 @@ Do not add authentication, multiplayer, profiles, achievements, payments, chat, 
 
 1. Play should be immediate.
 2. The emulator is infrastructure; the game is the product.
+   **Runtimes are invisible.** Emulator internals must never appear in
+   player-facing UI: no frame counters, no core names, no save-state plumbing,
+   no input diagnostics. Debug affordances belong behind a development flag.
 3. Retro does not mean visually outdated.
 4. Avoid fake nostalgia, excessive scanlines, neon overload, and arcade-site clutter.
 5. Controller support is a first-class experience.
@@ -158,6 +167,19 @@ A game record will likely need fields such as:
 Change the model when product needs justify it. Avoid speculative fields.
 
 ## Controller Experience
+
+Controllers are the platform's defining interaction. The default GameBoyStudio
+game is completely playable with a controller, and native games treat the
+standardized gamepad model as a first-class target.
+
+This is a default and a certification, **not** a prohibition. Games declare the
+input profiles they require and support, and the platform may host games using
+keyboard, pointer, touch, motion or combinations — including asymmetric play
+where different players use different devices.
+
+**Gamepad Native** means: discoverable, launchable, playable, pausable,
+navigable and completable without requiring another input device. The bar covers
+the whole session, not just gameplay.
 
 Gamepad support should feel deliberate.
 

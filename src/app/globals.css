@@ -63,3 +63,283 @@ body {
     transition-duration: 0.01ms !important;
   }
 }
+
+/* Boot indicator. Games hold a blank screen for seconds while starting, so the
+   player needs to show something is happening without naming the machinery. */
+.loading-dots {
+  display: inline-flex;
+  gap: 0.4rem;
+}
+.loading-dots i {
+  width: 0.35rem;
+  height: 0.35rem;
+  border-radius: 50%;
+  background: var(--gbs-lcd-deep);
+  animation: gbs-pulse 1.1s ease-in-out infinite;
+}
+.loading-dots i:nth-child(2) { animation-delay: 0.16s; }
+.loading-dots i:nth-child(3) { animation-delay: 0.32s; }
+
+@keyframes gbs-pulse {
+  0%, 100% { opacity: 0.25; transform: scale(0.85); }
+  50%      { opacity: 1;    transform: scale(1); background: var(--gbs-lcd); }
+}
+
+/* ---------------------------------------------------------------------------
+   Handheld Mode
+   The phone is the shell, so nothing here draws plastic. Classic handheld
+   ergonomics, our own visual language. Geometry is a starting assumption to be
+   tuned on real devices.
+   --------------------------------------------------------------------------- */
+
+.handheld {
+  position: fixed;
+  inset: 0;
+  /* dvh, not vh: mobile browser chrome collapses and vh does not follow. */
+  height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  background: var(--gbs-bg);
+  padding-top: env(safe-area-inset-top);
+  padding-bottom: env(safe-area-inset-bottom);
+  overscroll-behavior: none;
+  touch-action: none;
+  z-index: 50;
+  /* Screen up top, controls at the bottom, any slack between them. */
+  justify-content: space-between;
+}
+
+.handheld__stage {
+  flex: 0 1 auto;
+  min-height: 0;
+  display: flex;
+  /* Portrait: sit the game high. Any slack collects between screen and deck,
+     which keeps the screen at a comfortable viewing angle. */
+  align-items: flex-start;
+  justify-content: center;
+  padding: 0.5rem;
+}
+
+/* The canvas is aspect-correct rather than filling and letterboxing, so no
+   space is wasted inside the element. */
+.handheld__screen {
+  display: block;
+  image-rendering: pixelated;
+  aspect-ratio: 10 / 9;
+  width: 100%;
+  height: auto;
+  max-height: 100%;
+  border-radius: 0.25rem;
+}
+
+@media (orientation: landscape) {
+  .handheld__stage {
+    align-items: center;
+  }
+  /* Height-bound in landscape, which is what creates the thumb gutters. */
+  .handheld__screen {
+    width: auto;
+    height: 100%;
+    max-width: 100%;
+  }
+}
+
+/* The deck's height comes from touch-target maths, not a chosen percentage.
+   The game takes whatever is left. */
+/* Height comes from touch-target maths, not a chosen percentage. On a tall
+   phone the slack goes to the deck, which makes the controls more comfortable
+   rather than leaving dead space. */
+.handheld__deck {
+  flex: 1 1 auto;
+  min-height: clamp(220px, 40vh, 340px);
+  max-height: 420px;
+  transition: opacity 200ms ease, min-height 220ms ease, max-height 220ms ease;
+}
+
+.handheld__deck[data-hidden='true'] {
+  min-height: 0;
+  max-height: 0;
+  opacity: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+/* Landscape: the game is height-bound at 10:9, which leaves real gutters either
+   side — exactly where thumbs rest. Controls live in those gutters as an
+   overlay, so the game keeps the centre and is never covered. */
+@media (orientation: landscape) {
+  .handheld {
+    position: fixed;
+    flex-direction: row;
+    align-items: center;
+    justify-content: center;
+  }
+  .handheld__stage {
+    flex: 1 1 auto;
+    height: 100%;
+    align-items: center;
+  }
+  .handheld__deck {
+    position: absolute;
+    inset: 0;
+    min-height: 0;
+    max-height: none;
+    pointer-events: none;
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  .handheld__deck[data-hidden='true'] {
+    max-height: none;
+    min-height: 0;
+  }
+}
+
+.touch-deck {
+  position: relative;
+  height: 100%;
+  width: 100%;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: 1fr auto;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.75rem 1.25rem;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+  touch-action: none;
+}
+
+.touch-deck__cluster {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.touch-deck__cluster--left { justify-content: flex-start; }
+.touch-deck__cluster--right { justify-content: flex-end; }
+
+.touch-deck__menu {
+  grid-column: 1 / -1;
+  display: flex;
+  justify-content: center;
+  gap: 1rem;
+}
+
+@media (orientation: landscape) {
+  .touch-deck {
+    /* Bias everything low — the natural thumb arc, not the vertical centre. */
+    align-items: end;
+    padding: 0 1rem calc(1rem + env(safe-area-inset-bottom));
+  }
+  /* Only the controls take input; the gap between them shows the game. */
+  .touch-deck__cluster,
+  .touch-deck__menu {
+    pointer-events: auto;
+  }
+  /* Start and Select move into the bottom corners of the gutters rather than
+     the bottom centre, which in landscape sits underneath the game. */
+  .touch-deck__menu {
+    justify-content: space-between;
+    padding-top: 0.5rem;
+  }
+}
+
+/* --- D-pad ---------------------------------------------------------------- */
+
+.touch-dpad {
+  position: relative;
+  width: clamp(132px, 38vw, 168px);
+  aspect-ratio: 1;
+  flex: 0 0 auto;
+}
+
+.touch-dpad__arm {
+  position: absolute;
+  background: var(--gbs-surface-raised);
+  border-radius: 0.5rem;
+  box-shadow: inset 0 0 0 1px var(--gbs-border);
+}
+.touch-dpad__arm--v { left: 33.3%; right: 33.3%; top: 0; bottom: 0; }
+.touch-dpad__arm--h { top: 33.3%; bottom: 33.3%; left: 0; right: 0; }
+
+.touch-dpad__pad {
+  position: absolute;
+  border-radius: 0.4rem;
+  transition: background-color 60ms linear;
+  background: transparent;
+}
+.touch-dpad__pad--up    { left: 33.3%; right: 33.3%; top: 0; height: 33.3%; }
+.touch-dpad__pad--down  { left: 33.3%; right: 33.3%; bottom: 0; height: 33.3%; }
+.touch-dpad__pad--left  { top: 33.3%; bottom: 33.3%; left: 0; width: 33.3%; }
+.touch-dpad__pad--right { top: 33.3%; bottom: 33.3%; right: 0; width: 33.3%; }
+.touch-dpad__pad[data-down='true'] { background: var(--gbs-lcd-deep); }
+
+.touch-dpad__hub {
+  position: absolute;
+  left: 38%;
+  top: 38%;
+  width: 24%;
+  height: 24%;
+  border-radius: 50%;
+  background: var(--gbs-border);
+}
+
+/* --- Buttons -------------------------------------------------------------- */
+
+.touch-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-mono), monospace;
+  color: var(--gbs-text-muted);
+  background: var(--gbs-surface-raised);
+  box-shadow: inset 0 0 0 1px var(--gbs-border);
+  /* Press feedback must be instant — no transition on the way in. */
+  transition: transform 90ms ease-out, background-color 90ms ease-out;
+  touch-action: none;
+}
+
+.touch-btn--round {
+  width: clamp(60px, 17vw, 74px);
+  aspect-ratio: 1;
+  border-radius: 50%;
+  font-size: 0.95rem;
+  letter-spacing: 0.02em;
+}
+
+/* A above and right of B — matches the thumb roll and existing muscle memory. */
+.touch-btn--a { transform: translateY(-16%); }
+.touch-btn--b { transform: translateY(16%); margin-right: 0.75rem; }
+
+.touch-btn--pill {
+  min-width: 84px;
+  /* 44px floor applies to these too, even though they are used rarely. */
+  min-height: 44px;
+  border-radius: 999px;
+  font-size: 0.6rem;
+  letter-spacing: 0.12em;
+}
+
+.touch-btn[data-down='true'] {
+  background: var(--gbs-lcd-deep);
+  color: var(--gbs-lcd);
+  transition: none;
+}
+.touch-btn--round[data-down='true'] { transform: scale(0.92); }
+.touch-btn--a[data-down='true'] { transform: translateY(-16%) scale(0.92); }
+.touch-btn--b[data-down='true'] { transform: translateY(16%) scale(0.92); }
+
+/* Landscape control sizing. Must come after the base rules above — an earlier
+   media query loses to a later rule of equal specificity. Controls are sized to
+   stay inside the gutters so they never cover the game. */
+@media (orientation: landscape) {
+  .touch-dpad {
+    width: clamp(112px, 19vh, 150px);
+  }
+  .touch-btn--round {
+    width: clamp(52px, 14vh, 66px);
+  }
+  .touch-btn--pill {
+    min-width: 70px;
+    min-height: 44px;
+  }
+}

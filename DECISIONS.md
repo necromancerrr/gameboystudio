@@ -442,6 +442,65 @@ Consequences:
   reusing the existing one, which is exactly the pattern D-006 warns about; it
   survived only by accident until ext-RAM allocations made it trap.
 
+## D-014: Platform Thesis And Input Philosophy
+
+Status: Accepted 2026-08-08
+
+Decision:
+GameBoyStudio is an instant-play gaming platform for the web, built
+controller-first, existing to remove the distance between wanting to play
+something and actually playing it.
+
+Three contracts, with different force:
+
+- **Instant** — how the platform behaves. Binding. No install, no configuration,
+  no signup to play, fast start, a direct link plays the game.
+- **Controller-first** — how it feels. A strong default and a certification,
+  **not** a prohibition. Every game declares required and supported input
+  profiles. "Gamepad Native" means discoverable, launchable, playable, pausable,
+  navigable and completable without another input device. First-party and native
+  games must be Gamepad Native; the platform never forbids a game for using
+  another interaction model.
+- **Session-friendly** — what we curate toward. Philosophy, not a gate.
+
+Content expansion and platform evolution are **separate roadmaps**. Content is
+gated by legal supply; platform is gated by the previous rung. Adding consoles
+is a legitimate content decision and is not postponed — it simply must not be
+mistaken for platform progress.
+
+Options considered:
+Three candidate contracts were compared on what they permit, exclude,
+differentiate, and how each affects the native runtime, multiplayer, AI creation
+and ten-year durability. Constraining friction alone gives no creative identity;
+constraining session scope is unenforceable; constraining input gives creators a
+target, bounds the interaction space enough to make AI generation reliable,
+makes local multiplayer natural, and is genuinely uncontested on the web.
+
+Reason:
+Two earlier drafts were rejected for the same underlying error — freezing a good
+default into a permanent rule.
+
+The first proposed an "eight-button constrained console": 8 inputs, a Game Boy
+sized screen, tiny binaries, games finishable in one sitting. It was refuted by
+our own catalog — Aevilia is a 128K-save RPG that the rule would have excluded.
+The constraint described the sample, not the product.
+
+The second corrected the axis from hardware to input but then declared that
+keyboard, mouse and touch must be "optional additions, never requirements."
+That would have banned asymmetric party games where one player holds a pad and
+others use phones — a proven format. Identity does not require prohibition.
+
+Consequences:
+- Games need declared input profiles, which the catalog does not yet model.
+- Discovery should be able to answer "what can I play with the controller in my
+  hand", which requires those profiles as facets.
+- The native runtime targets a modern gamepad vocabulary, not eight buttons.
+- Multiplayer depends on native games: the retro catalog cannot deliver it,
+  since link-cable play is absent from nearly all homebrew and unsupported by
+  binjgb. PRODUCT_LAYERS was reordered accordingly.
+- Emulator internals are barred from player-facing UI, which means removing the
+  fps counter and input indicators currently shipped in the player.
+
 ## Template For Future Decisions
 
 ### D-XXX: Decision Name

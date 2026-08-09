@@ -57,6 +57,12 @@ export interface BinjgbAdapterOptions {
   onError?: (error: Error) => void;
   /** Fires when the cartridge wrote to battery RAM, i.e. the game saved. */
   onBatteryDirty?: () => void;
+  /**
+   * Fires once the game has drawn something other than a flat colour. Games
+   * hold a blank screen for seconds while booting, which is indistinguishable
+   * from a broken player, so the UI waits for this rather than for "loaded".
+   */
+  onFirstFrame?: () => void;
 }
 
 export class BinjgbAdapter implements EmulatorAdapter {
@@ -66,6 +72,8 @@ export class BinjgbAdapter implements EmulatorAdapter {
   private readonly onFps?: (fps: number) => void;
   private readonly onError?: (error: Error) => void;
   private readonly onBatteryDirty?: () => void;
+  private readonly onFirstFrame?: () => void;
+  private firstFrameReported = false;
 
   /**
    * Retained so a reset restores the save, the way pressing reset on real
@@ -98,6 +106,7 @@ export class BinjgbAdapter implements EmulatorAdapter {
     this.onFps = options.onFps;
     this.onError = options.onError;
     this.onBatteryDirty = options.onBatteryDirty;
+    this.onFirstFrame = options.onFirstFrame;
 
     this.canvas.width = SCREEN_WIDTH;
     this.canvas.height = SCREEN_HEIGHT;
@@ -405,6 +414,22 @@ export class BinjgbAdapter implements EmulatorAdapter {
     if (!this.frameBuffer || this.frameBuffer.byteLength === 0) return;
     this.imageData.data.set(this.frameBuffer);
     this.ctx.putImageData(this.imageData, 0, 0);
+
+    if (!this.firstFrameReported && this.hasVisibleContent()) {
+      this.firstFrameReported = true;
+      this.onFirstFrame?.();
+    }
+  }
+
+  /** Sampled uniformity check — cheap enough to run until it first passes. */
+  private hasVisibleContent(): boolean {
+    const fb = this.frameBuffer;
+    if (!fb) return false;
+    const first = fb[0];
+    for (let i = 4; i < fb.length; i += 401 * 4) {
+      if (fb[i] !== first) return true;
+    }
+    return false;
   }
 
   private pushAudio(): void {
