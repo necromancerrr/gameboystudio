@@ -464,18 +464,24 @@ await check('the runtime touches the frame clock only through the scheduler', ()
   assert.ok(/requestAnimationFrame/.test(loop), 'the seam has to exist somewhere');
 });
 
-await check('no page or component pulls the native runtime into a retro bundle', () => {
-  // Stage 6 wires native games into the library; when it does, the import
-  // must be dynamic so a Game Boy page never ships this code. Until then the
-  // honest assertion is that nothing imports it at all.
+await check('the app only reaches native code through a dynamic import', () => {
+  // A static import would put the runtime in the route bundle that Game Boy
+  // pages also load. Types are erased, so `import type` is fine. What the
+  // browser actually downloads is checked separately by verify:bundles.
   const roots = [`${REPO}/src/app`, `${REPO}/src/components`];
   const offenders = [];
   const walk = (dir) => {
     for (const item of fs.readdirSync(dir, { withFileTypes: true })) {
       const full = `${dir}/${item.name}`;
-      if (item.isDirectory()) walk(full);
-      else if (/\.tsx?$/.test(item.name) && /from '@\/native/.test(fs.readFileSync(full, 'utf8'))) {
-        offenders.push(path.relative(REPO, full));
+      if (item.isDirectory()) {
+        walk(full);
+        continue;
+      }
+      if (!/\.tsx?$/.test(item.name)) continue;
+      for (const line of fs.readFileSync(full, 'utf8').split('\n')) {
+        if (!/from '@\/native/.test(line)) continue;
+        if (/^\s*import\s+type\s/.test(line)) continue;
+        if (/^\s*import\s/.test(line)) offenders.push(`${path.relative(REPO, full)}: ${line.trim()}`);
       }
     }
   };

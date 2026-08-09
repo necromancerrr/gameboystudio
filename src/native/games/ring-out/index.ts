@@ -353,7 +353,7 @@ class RingOut implements NativeGame {
 
     // A warning rim once the ring is genuinely tight.
     const danger = this.radius < 70;
-    g.strokeStyle = danger ? PALETTE.danger : PALETTE.hairline;
+    g.strokeStyle = danger ? PALETTE.danger : PALETTE.faint;
     g.lineWidth = danger ? 2 : 1.5;
     g.beginPath();
     g.arc(CENTER.x, CENTER.y, this.radius, 0, Math.PI * 2);

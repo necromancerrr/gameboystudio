@@ -317,6 +317,7 @@ class Drift implements NativeGame {
 
     this.drawHud(g);
     if (this.lost) this.drawLost(g);
+    else if (this.elapsed < 5 && this.score === 0) this.drawHint(g);
   }
 
   private drawStar(g: CanvasRenderingContext2D): void {
@@ -427,6 +428,21 @@ class Drift implements NativeGame {
     g.textAlign = 'right';
     g.fillStyle = PALETTE.faint;
     g.fillText(`BEST ${String(this.best).padStart(2, '0')}`, ORIGINAL_RESOLUTION.width - 12, 11);
+  }
+
+  /**
+   * The controls, in the game, for the first few seconds only. A game that
+   * needs a manual on the page around it has not finished explaining itself.
+   */
+  private drawHint(g: CanvasRenderingContext2D): void {
+    const { width, height } = ORIGINAL_RESOLUTION;
+    g.textAlign = 'center';
+    g.textBaseline = 'alphabetic';
+    g.font = '500 11px ui-monospace, SFMono-Regular, Menlo, monospace';
+    g.fillStyle = PALETTE.faint;
+    g.globalAlpha = Math.min(1, (5 - this.elapsed) / 1.5);
+    g.fillText('LEFT / RIGHT TO TURN   ·   A TO THRUST', width / 2, height - 22);
+    g.globalAlpha = 1;
   }
 
   private drawLost(g: CanvasRenderingContext2D): void {

@@ -8,7 +8,10 @@
     "start": "next start",
     "lint": "eslint",
     "verify:catalog": "node scripts/verify-catalog.mjs",
-    "verify:native": "node scripts/verify-native-runtime.mjs"
+    "verify:native": "node scripts/verify-native-runtime.mjs",
+    "verify:bundles": "node scripts/verify-bundles.mjs",
+    "verify:browser": "node scripts/verify-browser.mjs",
+    "verify": "npm run lint && npm run verify:catalog && npm run verify:native && npm run build && npm run verify:bundles && npm run verify:browser"
   },
   "dependencies": {
     "next": "16.3.0",
