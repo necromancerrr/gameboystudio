@@ -42,3 +42,6 @@ next-env.d.ts
 
 # preview contact sheets (review artifacts)
 /.preview-sheets/
+
+# native runtime harness build output
+/.native-build/

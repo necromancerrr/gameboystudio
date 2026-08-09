@@ -12,6 +12,8 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Compiler output from the native runtime harness, not source.
+    ".native-build/**",
   ]),
 ]);
 

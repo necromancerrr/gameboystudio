@@ -7,7 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "verify:catalog": "node scripts/verify-catalog.mjs"
+    "verify:catalog": "node scripts/verify-catalog.mjs",
+    "verify:native": "node scripts/verify-native-runtime.mjs"
   },
   "dependencies": {
     "next": "16.3.0",

@@ -1,0 +1,16 @@
+{
+  "//": "Used only by scripts/verify-native-runtime.mjs, to emit the native runtime as CommonJS that Node can require. The app's real typecheck is still `npm run build`.",
+  "compilerOptions": {
+    "target": "es2022",
+    "lib": ["es2022", "dom"],
+    "module": "commonjs",
+    "moduleResolution": "node",
+    "strict": true,
+    "skipLibCheck": true,
+    "baseUrl": "..",
+    "paths": { "@/*": ["./src/*"] },
+    "rootDir": "../src",
+    "outDir": "../.native-build"
+  },
+  "include": ["../src/native/**/*.ts"]
+}
