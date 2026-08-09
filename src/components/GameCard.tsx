@@ -15,9 +15,11 @@ export function GameCard({ game, priority = false }: { game: Game; priority?: bo
     >
       <div className="aspect-gb relative overflow-hidden rounded-lg border border-hairline bg-black transition-colors group-hover:border-hairline-strong">
         <GameThumb game={game} priority={priority} />
-        <span className="absolute top-2 right-2 rounded bg-black/70 px-1.5 py-0.5 font-mono text-[10px] tracking-wide text-lcd backdrop-blur-sm">
-          {game.console}
-        </span>
+        {game.console ? (
+          <span className="absolute top-2 right-2 rounded bg-black/70 px-1.5 py-0.5 font-mono text-[10px] tracking-wide text-lcd backdrop-blur-sm">
+            {game.console}
+          </span>
+        ) : null}
       </div>
 
       <div className="mt-2.5">

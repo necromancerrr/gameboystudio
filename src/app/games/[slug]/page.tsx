@@ -8,6 +8,7 @@ import {
   getAllGames,
   getGameBySlug,
   getSeriesSiblings,
+  isRetro,
 } from '@/catalog';
 import { GameCard } from '@/components/GameCard';
 
@@ -39,6 +40,9 @@ export default async function GamePage({
   const { slug } = await params;
   const game = getGameBySlug(slug);
   if (!game) notFound();
+  // Every catalog entry is retro today. Native games arrive with their own
+  // runtime later in M3; until one exists there is nothing honest to render.
+  if (!isRetro(game)) notFound();
 
   const extraShots = game.screenshots.slice(1);
   const siblings = getSeriesSiblings(game);
@@ -55,7 +59,7 @@ export default async function GamePage({
       <div className="mt-6">
         <GameBoyPlayer
           source={{
-            romUrl: game.romPath,
+            romUrl: game.entry,
             console: game.console,
             saveKey: game.slug,
           }}
@@ -88,7 +92,7 @@ export default async function GamePage({
               {tag}
             </li>
           ))}
-          {game.hasSave ? (
+          {game.saves ? (
             <li className="rounded-full border border-lcd-deep px-2.5 py-0.5 text-xs text-lcd">
               Saves your progress
             </li>
