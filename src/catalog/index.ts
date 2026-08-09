@@ -1,10 +1,30 @@
 import type { ConsoleId } from '@/emulation/core/types';
 import { GAMES } from './games';
+import previewManifest from './previews.json';
 import type { Game } from './types';
 
 export { GAMES };
 export type { Game };
 export { CONSOLE_LABELS } from './types';
+
+/** A verified gameplay loop. Only games that earned one appear here. */
+export interface GamePreviewAsset {
+  loop: string;
+  still: string;
+  frames: number;
+  fps: number;
+}
+
+const PREVIEWS = previewManifest as Record<string, GamePreviewAsset>;
+
+/**
+ * Returns a loop only if one was generated AND approved by eye. Most games
+ * legitimately have none and fall back to their curated screenshot — see
+ * scripts/preview-recipes.json for the per-game reasoning.
+ */
+export function getPreview(game: Game): GamePreviewAsset | null {
+  return PREVIEWS[game.slug] ?? null;
+}
 
 /** Curated order. See the rank field — alphabetical buried the good ones. */
 export function getAllGames(): readonly Game[] {

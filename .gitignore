@@ -39,3 +39,6 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# preview contact sheets (review artifacts)
+/.preview-sheets/

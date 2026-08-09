@@ -64,6 +64,44 @@ body {
   }
 }
 
+/* Gameplay preview loops. A sprite strip stepped through with an animation:
+   transform percentages resolve against the strip's own width, so steps(N)
+   lands exactly on each frame regardless of tile size. */
+.preview {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+}
+
+.preview__strip {
+  position: absolute;
+  inset: 0 auto 0 0;
+  height: 100%;
+  background-repeat: repeat-x;
+  background-size: 100% 100%;
+  image-rendering: pixelated;
+  animation: gbs-strip var(--duration) steps(var(--frames)) infinite;
+  animation-play-state: paused;
+  will-change: transform;
+}
+
+.preview__strip[data-playing='true'] {
+  animation-play-state: running;
+}
+
+@keyframes gbs-strip {
+  to {
+    transform: translateX(-100%);
+  }
+}
+
+.preview__still {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  image-rendering: pixelated;
+}
+
 /* Boot indicator. Games hold a blank screen for seconds while starting, so the
    player needs to show something is happening without naming the machinery. */
 .loading-dots {

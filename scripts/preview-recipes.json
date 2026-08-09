@@ -1,0 +1,46 @@
+{
+  "tobutobugirldeluxe": {
+    "warmup": 14, "settle": 0, "frames": 24, "fps": 10, "motion": true,
+    "note": "REVIEWED: attract-mode demo plays real gameplay with no input"
+  },
+  "2048gb": {
+    "warmup": 2, "settle": 1, "frames": 24, "fps": 8, "motion": true,
+    "note": "REVIEWED: tiles slide and merge, score climbs 0 to 16",
+    "press": [{ "button": "start", "atSec": 2 }],
+    "during": [{ "button": "left", "atFrame": 1 }, { "button": "up", "atFrame": 4 }, { "button": "right", "atFrame": 7 }, { "button": "down", "atFrame": 10 }, { "button": "left", "atFrame": 13 }, { "button": "up", "atFrame": 16 }, { "button": "right", "atFrame": 19 }, { "button": "down", "atFrame": 22 }]
+  },
+  "snake": {
+    "warmup": 6, "settle": 4, "frames": 24, "fps": 10, "motion": true,
+    "note": "REVIEWED: snake moves and turns, timer counts down. settle skips the READY banner",
+    "press": [{ "button": "start", "atSec": 6 }, { "button": "start", "atSec": 7 }, { "button": "a", "atSec": 8 }],
+    "during": [{ "button": "down", "atFrame": 6 }, { "button": "left", "atFrame": 12 }, { "button": "up", "atFrame": 18 }]
+  },
+  "flooder": {
+    "warmup": 2, "settle": 1, "frames": 24, "fps": 8, "motion": true,
+    "note": "REVIEWED: board floods, moves counter 24 down to 21",
+    "press": [{ "button": "start", "atSec": 2 }, { "button": "a", "atSec": 3 }],
+    "during": [{ "button": "right", "atFrame": 2 }, { "button": "a", "atFrame": 5 }, { "button": "down", "atFrame": 8 }, { "button": "a", "atFrame": 11 }, { "button": "left", "atFrame": 14 }, { "button": "a", "atFrame": 17 }, { "button": "up", "atFrame": 20 }]
+  },
+  "renegade-rush": {
+    "warmup": 3, "settle": 2, "frames": 24, "fps": 10, "motion": true,
+    "note": "REVIEWED: cars move, road scrolls, speed drops 139 to 088",
+    "press": [{ "button": "start", "atSec": 3 }, { "button": "a", "atSec": 5 }],
+    "during": [{ "button": "a", "atFrame": 6 }, { "button": "a", "atFrame": 14 }]
+  },
+
+  "shock-lobster": { "skip": true, "note": "REVIEWED and rejected: reaches a controls tutorial overlay, not gameplay. Frame-difference scored it 24/24 because a snail animates behind the diagram" },
+  "europa-rescue": { "skip": true, "note": "REVIEWED and rejected: intro cutscene with typewriter dialogue over a static portrait" },
+  "aevilia": { "skip": true, "note": "RPG intro is a dialogue wall; reaching gameplay needs a long scripted sequence" },
+  "gbhack": { "skip": true, "note": "menu did not advance with scripted input" },
+  "crossconnect": { "skip": true, "note": "did not reach a puzzle board" },
+  "squishy-the-turtle": { "skip": true, "note": "did not get past the title" },
+  "postbot": { "skip": true, "note": "did not get past the title" },
+  "maxpirate": { "skip": true, "note": "did not get past the title" },
+  "tobutobugirl": { "skip": true, "note": "capture lands on the blinking PRESS START title — the original trap case" },
+  "labirinth": { "skip": true, "note": "did not get past the title" },
+  "jp": { "skip": true, "note": "did not get past the title" },
+  "5-mazes": { "skip": true, "note": "did not get past the title" },
+  "maxpirateeb": { "skip": true, "note": "did not get past the title" },
+  "5-more-mazes": { "skip": true, "note": "did not get past the title" },
+  "5-mazes-master-levels": { "skip": true, "note": "did not get past the title" }
+}

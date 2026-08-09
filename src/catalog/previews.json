@@ -1,0 +1,32 @@
+{
+  "tobutobugirldeluxe": {
+    "loop": "/previews/tobutobugirldeluxe-loop.webp",
+    "still": "/previews/tobutobugirldeluxe.webp",
+    "frames": 24,
+    "fps": 10
+  },
+  "2048gb": {
+    "loop": "/previews/2048gb-loop.webp",
+    "still": "/previews/2048gb.webp",
+    "frames": 24,
+    "fps": 8
+  },
+  "snake": {
+    "loop": "/previews/snake-loop.webp",
+    "still": "/previews/snake.webp",
+    "frames": 24,
+    "fps": 10
+  },
+  "flooder": {
+    "loop": "/previews/flooder-loop.webp",
+    "still": "/previews/flooder.webp",
+    "frames": 24,
+    "fps": 8
+  },
+  "renegade-rush": {
+    "loop": "/previews/renegade-rush-loop.webp",
+    "still": "/previews/renegade-rush.webp",
+    "frames": 24,
+    "fps": 10
+  }
+}

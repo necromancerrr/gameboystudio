@@ -1,6 +1,7 @@
 import Image from 'next/image';
 import Link from 'next/link';
-import type { Game } from '@/catalog';
+import { getPreview, type Game } from '@/catalog';
+import { GamePreview } from '@/components/GamePreview';
 
 /**
  * Homebrew has no box art, so the card is built around the thing that does
@@ -11,6 +12,7 @@ import type { Game } from '@/catalog';
  */
 export function GameCard({ game, priority = false }: { game: Game; priority?: boolean }) {
   const cover = game.screenshots[0];
+  const preview = getPreview(game);
 
   return (
     <Link
@@ -18,7 +20,9 @@ export function GameCard({ game, priority = false }: { game: Game; priority?: bo
       className="group block rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-lcd"
     >
       <div className="aspect-gb relative overflow-hidden rounded-lg border border-hairline bg-black transition-colors group-hover:border-hairline-strong">
-        {cover ? (
+        {preview ? (
+          <GamePreview preview={preview} alt={`${game.title} gameplay`} eager={priority} />
+        ) : cover ? (
           <Image
             src={cover}
             alt=""
