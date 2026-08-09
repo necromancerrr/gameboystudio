@@ -3,7 +3,13 @@ import Image from 'next/image';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { GameBoyPlayer } from '@/components/GameBoyPlayer';
-import { CONSOLE_LABELS, getAllGames, getGameBySlug } from '@/catalog';
+import {
+  CONSOLE_LABELS,
+  getAllGames,
+  getGameBySlug,
+  getSeriesSiblings,
+} from '@/catalog';
+import { GameCard } from '@/components/GameCard';
 
 export function generateStaticParams() {
   return getAllGames().map((game) => ({ slug: game.slug }));
@@ -35,6 +41,7 @@ export default async function GamePage({
   if (!game) notFound();
 
   const extraShots = game.screenshots.slice(1);
+  const siblings = getSeriesSiblings(game);
 
   return (
     <div className="mx-auto w-full max-w-4xl flex-1 px-6 py-8 sm:px-8">
@@ -72,18 +79,21 @@ export default async function GamePage({
           </p>
         ) : null}
 
-        {game.genre.length > 0 ? (
-          <ul className="mt-5 flex flex-wrap gap-1.5">
-            {game.genre.map((tag) => (
-              <li
-                key={tag}
-                className="rounded-full border border-hairline px-2.5 py-0.5 text-xs text-muted"
-              >
-                {tag}
-              </li>
-            ))}
-          </ul>
-        ) : null}
+        <ul className="mt-5 flex flex-wrap gap-1.5">
+          {game.genre.map((tag) => (
+            <li
+              key={tag}
+              className="rounded-full border border-hairline px-2.5 py-0.5 text-xs text-muted"
+            >
+              {tag}
+            </li>
+          ))}
+          {game.hasSave ? (
+            <li className="rounded-full border border-lcd-deep px-2.5 py-0.5 text-xs text-lcd">
+              Saves your progress
+            </li>
+          ) : null}
+        </ul>
 
         {extraShots.length > 0 ? (
           <div className="mt-8">
@@ -103,6 +113,21 @@ export default async function GamePage({
                     sizes="(max-width: 640px) 50vw, 240px"
                     className="pixelated object-cover"
                   />
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
+
+        {siblings.length > 0 ? (
+          <div className="mt-8">
+            <h2 className="mb-3 text-xs font-medium tracking-wide text-faint uppercase">
+              More in the {game.series} series
+            </h2>
+            <ul className="grid grid-cols-2 gap-4 sm:grid-cols-3">
+              {siblings.map((sibling) => (
+                <li key={sibling.slug}>
+                  <GameCard game={sibling} />
                 </li>
               ))}
             </ul>

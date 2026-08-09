@@ -6,6 +6,7 @@ export { GAMES };
 export type { Game };
 export { CONSOLE_LABELS } from './types';
 
+/** Curated order. See the rank field — alphabetical buried the good ones. */
 export function getAllGames(): readonly Game[] {
   return GAMES;
 }
@@ -22,4 +23,36 @@ export function getGamesByConsole(console: ConsoleId): Game[] {
 export function getConsoles(): ConsoleId[] {
   const order: ConsoleId[] = ['GB', 'GBC'];
   return order.filter((id) => GAMES.some((game) => game.console === id));
+}
+
+/** Other titles sharing a series, excluding the game itself. */
+export function getSeriesSiblings(game: Game): Game[] {
+  if (!game.series) return [];
+  return GAMES.filter((other) => other.series === game.series && other.slug !== game.slug);
+}
+
+function normalize(value: string): string {
+  return value
+    .toLowerCase()
+    .normalize('NFD')
+    // Strip diacritics so "swiatow" matches "Światów".
+    .replace(/[̀-ͯ]/g, '');
+}
+
+/**
+ * Substring match across the fields a person would actually type: title,
+ * developer, series and genre. At 20 games this runs on every keystroke with
+ * no debounce and no index.
+ */
+export function searchGames(games: readonly Game[], query: string): Game[] {
+  const q = normalize(query.trim());
+  if (!q) return [...games];
+  const terms = q.split(/\s+/);
+
+  return games.filter((game) => {
+    const haystack = normalize(
+      [game.title, game.developer, game.series ?? '', ...game.genre].join(' '),
+    );
+    return terms.every((term) => haystack.includes(term));
+  });
 }

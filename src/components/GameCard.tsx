@@ -4,8 +4,10 @@ import type { Game } from '@/catalog';
 
 /**
  * Homebrew has no box art, so the card is built around the thing that does
- * exist: a 160x144 screen grab. Framing every tile at the Game Boy's own
- * aspect ratio makes the grid read as deliberate rather than as missing covers.
+ * exist: a screen grab. Framing every tile at the Game Boy's own aspect ratio
+ * makes the grid read as deliberate rather than as missing covers.
+ *
+ * Gameplay preview loops replace the static image in the next step.
  */
 export function GameCard({ game, priority = false }: { game: Game; priority?: boolean }) {
   const cover = game.screenshots[0];
@@ -41,6 +43,11 @@ export function GameCard({ game, priority = false }: { game: Game; priority?: bo
           {game.title}
         </h3>
         <p className="truncate text-xs text-muted">{game.developer}</p>
+        {game.series ? (
+          <p className="mt-0.5 truncate text-[11px] text-faint">
+            {game.series} series
+          </p>
+        ) : null}
       </div>
     </Link>
   );

@@ -18,6 +18,13 @@ export interface Game {
   /** Upstream repository or author page. */
   sourceUrl: string;
   homepageUrl: string;
+
+  /** Curated position in the library. Lower sorts first. */
+  rank: number;
+  /** Shared name for related titles, so the grid can group rather than repeat. */
+  series: string | null;
+  /** Cartridge has battery-backed RAM, so progress persists. From the header. */
+  hasSave: boolean;
 }
 
 export const CONSOLE_LABELS: Record<ConsoleId, string> = {
