@@ -1,12 +1,13 @@
 /**
- * Gamepad -> logical button mapping.
+ * Gamepad -> logical button mapping, per player.
  *
  * The Gamepad API has no events for button state, so this polls. Polling runs
- * on its own animation frame rather than inside the emulator loop, so a
- * controller still works while the game is paused.
+ * on its own animation frame rather than inside the game loop, so a controller
+ * still works while the game is paused.
  */
 
 import { LOGICAL_BUTTONS, type LogicalButton } from '@/emulation/core/types';
+import type { PlayerIndex } from './InputRouter';
 
 /**
  * Indexes from the W3C "standard gamepad" mapping, which is defined by physical
@@ -17,10 +18,8 @@ import { LOGICAL_BUTTONS, type LogicalButton } from '@/emulation/core/types';
  *   B <- index 0, the south face button
  *
  * On a Nintendo-layout pad this lines up with the printed A and B. On an
- * Xbox-layout pad the button printed "B" becomes Game Boy A — correct under the
- * thumb, which is what actually matters, and the long-standing convention in
- * emulators. Mapping by label instead would mirror the buttons on one of the
- * two layouts.
+ * Xbox-layout pad the button printed "B" becomes A — correct under the thumb,
+ * which is what actually matters, and the long-standing emulator convention.
  */
 const BUTTON_INDEXES: Record<LogicalButton, readonly number[]> = {
   up: [12],
@@ -33,7 +32,6 @@ const BUTTON_INDEXES: Record<LogicalButton, readonly number[]> = {
   select: [8], // Back / Share / View / Minus
 };
 
-/** Left stick axes, used as an alternative to the D-pad. */
 const AXIS_X = 0;
 const AXIS_Y = 1;
 
@@ -45,15 +43,23 @@ const AXIS_THRESHOLD = 0.5;
 
 export interface GamepadInfo {
   id: string;
+  /** The browser's gamepad index — not the player slot. */
   index: number;
+  player: PlayerIndex;
   /** False when the browser could not match a known layout; mapping is a guess. */
   standardMapping: boolean;
 }
 
 export interface GamepadBindingOptions {
-  onButton: (button: LogicalButton, pressed: boolean) => void;
-  /** Called with the active pad, or null when none is connected. */
-  onConnectionChange?: (pad: GamepadInfo | null) => void;
+  /**
+   * How many independent players this game accepts. At 1 every connected pad
+   * drives player 0, so whichever controller someone picks up just works.
+   * Above 1, slots are exclusive.
+   */
+  maxPlayers?: number;
+  onButton: (player: PlayerIndex, button: LogicalButton, pressed: boolean) => void;
+  /** Called with every assigned pad whenever the set changes. */
+  onConnectionChange?: (pads: GamepadInfo[]) => void;
 }
 
 function isPressed(button: GamepadButton | undefined): boolean {
@@ -71,8 +77,63 @@ function readPads(): Gamepad[] {
   return pads;
 }
 
+/**
+ * Assigns pads to player slots.
+ *
+ * Deliberately not positional: `gamepads[0] === player 1` breaks the moment a
+ * pad sleeps and reconnects at a different browser index. Slots are held, freed
+ * on disconnect, and preferred again when the same pad id returns.
+ */
+class SlotAssigner {
+  private readonly byGamepadIndex = new Map<number, PlayerIndex>();
+  private readonly lastSlotForId = new Map<string, PlayerIndex>();
+
+  constructor(private readonly maxPlayers: number) {}
+
+  /** Returns the slot for a pad, assigning one if needed, or null if full. */
+  slotFor(pad: Gamepad): PlayerIndex | null {
+    const existing = this.byGamepadIndex.get(pad.index);
+    if (existing !== undefined) return existing;
+
+    // One-player games merge every pad, so any controller works.
+    if (this.maxPlayers <= 1) {
+      this.byGamepadIndex.set(pad.index, 0);
+      return 0;
+    }
+
+    const taken = new Set(this.byGamepadIndex.values());
+    const preferred = this.lastSlotForId.get(pad.id);
+    if (preferred !== undefined && !taken.has(preferred)) {
+      this.byGamepadIndex.set(pad.index, preferred);
+      return preferred;
+    }
+
+    for (let slot = 0; slot < this.maxPlayers; slot += 1) {
+      if (!taken.has(slot)) {
+        this.byGamepadIndex.set(pad.index, slot);
+        this.lastSlotForId.set(pad.id, slot);
+        return slot;
+      }
+    }
+    return null; // every slot is spoken for
+  }
+
+  /** Returns the slots freed by pads that are no longer present. */
+  prune(present: Set<number>): PlayerIndex[] {
+    const freed: PlayerIndex[] = [];
+    for (const [gamepadIndex, slot] of this.byGamepadIndex) {
+      if (!present.has(gamepadIndex)) {
+        this.byGamepadIndex.delete(gamepadIndex);
+        freed.push(slot);
+      }
+    }
+    return freed;
+  }
+}
+
 /** Returns an unbind function; callers must invoke it on teardown. */
 export function bindGamepad({
+  maxPlayers = 1,
   onButton,
   onConnectionChange,
 }: GamepadBindingOptions): () => void {
@@ -80,45 +141,57 @@ export function bindGamepad({
     return () => {};
   }
 
-  const held = new Set<LogicalButton>();
+  const slots = new SlotAssigner(maxPlayers);
+  const held = new Map<PlayerIndex, Set<LogicalButton>>();
   let frame: number | null = null;
-  let lastPadKey: string | null = null;
+  let lastSignature = '';
 
-  const reportConnection = (pads: Gamepad[]) => {
-    const pad = pads[0] ?? null;
-    const key = pad ? `${pad.index}:${pad.id}` : null;
-    if (key === lastPadKey) return;
-    lastPadKey = key;
-    onConnectionChange?.(
-      pad
-        ? {
-            id: pad.id,
-            index: pad.index,
-            standardMapping: pad.mapping === 'standard',
-          }
-        : null,
-    );
+  const heldFor = (player: PlayerIndex): Set<LogicalButton> => {
+    let set = held.get(player);
+    if (!set) {
+      set = new Set();
+      held.set(player, set);
+    }
+    return set;
   };
 
-  const poll = () => {
-    frame = requestAnimationFrame(poll);
+  const releasePlayer = (player: PlayerIndex) => {
+    const set = held.get(player);
+    if (!set) return;
+    for (const button of set) onButton(player, button, false);
+    set.clear();
+  };
 
+  const pollOnce = () => {
     const pads = readPads();
-    reportConnection(pads);
+    const present = new Set(pads.map((pad) => pad.index));
+    for (const freedSlot of slots.prune(present)) releasePlayer(freedSlot);
 
-    for (const button of LOGICAL_BUTTONS) {
-      let pressed = false;
+    const assigned: GamepadInfo[] = [];
+    // player -> the buttons any of that player's pads is holding this frame
+    const desired = new Map<PlayerIndex, Set<LogicalButton>>();
 
-      // Merge every connected pad so whichever one the player picks up works.
-      for (const pad of pads) {
-        for (const index of BUTTON_INDEXES[button]) {
-          if (isPressed(pad.buttons[index])) {
-            pressed = true;
-            break;
-          }
+    for (const pad of pads) {
+      const player = slots.slotFor(pad);
+      if (player === null) continue;
+      assigned.push({
+        id: pad.id,
+        index: pad.index,
+        player,
+        standardMapping: pad.mapping === 'standard',
+      });
+
+      let want = desired.get(player);
+      if (!want) {
+        want = new Set();
+        desired.set(player, want);
+      }
+
+      for (const button of LOGICAL_BUTTONS) {
+        if (BUTTON_INDEXES[button].some((i) => isPressed(pad.buttons[i]))) {
+          want.add(button);
+          continue;
         }
-        if (pressed) break;
-
         const x = pad.axes[AXIS_X] ?? 0;
         const y = pad.axes[AXIS_Y] ?? 0;
         if (
@@ -127,26 +200,49 @@ export function bindGamepad({
           (button === 'up' && y <= -AXIS_THRESHOLD) ||
           (button === 'down' && y >= AXIS_THRESHOLD)
         ) {
-          pressed = true;
-          break;
+          want.add(button);
         }
       }
+    }
 
-      // Emit edges only, so the emulator sees presses and releases once each.
-      if (pressed && !held.has(button)) {
-        held.add(button);
-        onButton(button, true);
-      } else if (!pressed && held.has(button)) {
-        held.delete(button);
-        onButton(button, false);
+    // Emit edges only, so the game sees each press and release once.
+    for (const [player, want] of desired) {
+      const current = heldFor(player);
+      for (const button of want) {
+        if (!current.has(button)) {
+          current.add(button);
+          onButton(player, button, true);
+        }
       }
+      for (const button of [...current]) {
+        if (!want.has(button)) {
+          current.delete(button);
+          onButton(player, button, false);
+        }
+      }
+    }
+
+    const signature = assigned
+      .map((pad) => `${pad.player}:${pad.index}:${pad.id}`)
+      .sort()
+      .join('|');
+    if (signature !== lastSignature) {
+      lastSignature = signature;
+      onConnectionChange?.(assigned);
     }
   };
 
+  const poll = () => {
+    frame = requestAnimationFrame(poll);
+    pollOnce();
+  };
+
   // Chrome hides gamepads until the page has seen input from them, so these
-  // events are what surface a pad that was already plugged in.
+  // events are what surface a pad that was already plugged in. Reporting runs
+  // immediately rather than waiting for the next frame, so connection feedback
+  // does not depend on the loop having ticked.
   const handleConnection = () => {
-    reportConnection(readPads());
+    pollOnce();
   };
 
   window.addEventListener('gamepadconnected', handleConnection);
@@ -158,8 +254,7 @@ export function bindGamepad({
     frame = null;
     window.removeEventListener('gamepadconnected', handleConnection);
     window.removeEventListener('gamepaddisconnected', handleConnection);
-    // Release anything still held so the emulator can't be left stuck.
-    for (const button of held) onButton(button, false);
+    for (const player of held.keys()) releasePlayer(player);
     held.clear();
   };
 }

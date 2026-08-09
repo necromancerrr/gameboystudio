@@ -51,6 +51,52 @@ export const DEFAULT_KEY_MAP: Readonly<Record<string, LogicalButton>> = {
   shift: 'select',
 };
 
+/**
+ * Two-player keyboard split. Player one loses the WASD aliases here because
+ * player two needs them — in single-player both schemes stay available.
+ *
+ * This exists so couch multiplayer is testable without two physical pads.
+ */
+export const P1_DUAL_CODE_MAP: Readonly<Record<string, LogicalButton>> = {
+  ArrowUp: 'up',
+  ArrowDown: 'down',
+  ArrowLeft: 'left',
+  ArrowRight: 'right',
+  KeyX: 'a',
+  KeyZ: 'b',
+  Enter: 'start',
+  ShiftRight: 'select',
+};
+
+export const P1_DUAL_KEY_MAP: Readonly<Record<string, LogicalButton>> = {
+  arrowup: 'up',
+  arrowdown: 'down',
+  arrowleft: 'left',
+  arrowright: 'right',
+  x: 'a',
+  z: 'b',
+  enter: 'start',
+};
+
+export const P2_CODE_MAP: Readonly<Record<string, LogicalButton>> = {
+  KeyW: 'up',
+  KeyS: 'down',
+  KeyA: 'left',
+  KeyD: 'right',
+  KeyH: 'a',
+  KeyG: 'b',
+  Tab: 'start',
+};
+
+export const P2_KEY_MAP: Readonly<Record<string, LogicalButton>> = {
+  w: 'up',
+  s: 'down',
+  a: 'left',
+  d: 'right',
+  h: 'a',
+  g: 'b',
+};
+
 /** Arrow keys scroll the page; nothing else we map has a default worth blocking. */
 const SCROLL_KEYS = new Set(['up', 'down', 'left', 'right']);
 

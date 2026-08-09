@@ -112,7 +112,11 @@ export function GameBoyPlayer({ source, title }: GameBoyPlayerProps) {
 
     // Every source writes through the router so button state is the union of
     // sources rather than last-writer-wins.
-    const router = new InputRouter((button, pressed) =>
+    //
+    // Retro games have one joypad, so every player collapses onto it: whichever
+    // controller someone picks up drives the game. BinjgbAdapter never learns
+    // that players exist.
+    const router = new InputRouter((_player, button, pressed) =>
       adapter.setButton(button, pressed),
     );
     routerRef.current = router;
@@ -122,20 +126,24 @@ export function GameBoyPlayer({ source, title }: GameBoyPlayerProps) {
     }
 
     const unbindKeyboard = bindKeyboard({
-      onButton: (button, pressed) => router.set('keyboard', button, pressed),
+      onButton: (button, pressed) => router.set(0, 'keyboard', button, pressed),
     });
 
     const unbindGamepad = bindGamepad({
-      onButton: (button, pressed) => router.set('gamepad', button, pressed),
-      onConnectionChange: (pad) => {
+      // Retro is one joypad, so every pad merges onto player 0.
+      maxPlayers: 1,
+      onButton: (player, button, pressed) =>
+        router.set(player, 'gamepad', button, pressed),
+      onConnectionChange: (pads) => {
         if (cancelled) return;
+        const pad = pads[0] ?? null;
         // Debounced so a flaky Bluetooth reconnect cannot thrash the layout.
         if (padTimer) clearTimeout(padTimer);
         padTimer = setTimeout(() => {
           if (cancelled) return;
           setGamepad(pad);
           if (pad) {
-            router.releaseSource('touch');
+            router.releaseSource(0, 'touch');
             setTouchForced(false);
             setToast(`${pad.id.replace(/\s*\([^)]*\)\s*/g, ' ').trim()} connected`);
             if (toastTimer) clearTimeout(toastTimer);
@@ -239,7 +247,7 @@ export function GameBoyPlayer({ source, title }: GameBoyPlayerProps) {
   }, []);
 
   const handleTouchButton = useCallback((button: LogicalButton, pressed: boolean) => {
-    routerRef.current?.set('touch', button, pressed);
+    routerRef.current?.set(0, 'touch', button, pressed);
   }, []);
 
   const handleFullscreen = useCallback(() => {
@@ -247,7 +255,7 @@ export function GameBoyPlayer({ source, title }: GameBoyPlayerProps) {
   }, []);
 
   const releaseTouch = useCallback(() => {
-    routerRef.current?.releaseSource('touch');
+    routerRef.current?.releaseSource(0, 'touch');
   }, []);
 
   const handheldActive = isHandheld && started && status === 'ready';
