@@ -484,18 +484,369 @@ await check('no page or component pulls the native runtime into a retro bundle',
 });
 
 await check('the native runtime does not import emulator code', () => {
-  for (const file of fs.readdirSync(`${REPO}/src/native`)) {
-    const source = fs.readFileSync(`${REPO}/src/native/${file}`, 'utf8');
+  const files = [];
+  const walk = (dir) => {
+    for (const item of fs.readdirSync(dir, { withFileTypes: true })) {
+      if (item.isDirectory()) walk(`${dir}/${item.name}`);
+      else if (item.name.endsWith('.ts')) files.push(`${dir}/${item.name}`);
+    }
+  };
+  walk(`${REPO}/src/native`);
+  assert.ok(files.length >= 7, 'found the native sources');
+  for (const file of files) {
+    const source = fs.readFileSync(file, 'utf8');
     for (const line of source.split('\n')) {
       const isImport = /^\s*import\s/.test(line);
       if (!isImport) continue;
       const isTypeOnly = /^\s*import type\s/.test(line);
       assert.ok(
         !/emulation/.test(line) || isTypeOnly,
-        `${file} imports emulator code at runtime: ${line.trim()}`,
+        `${path.relative(REPO, file)} imports emulator code at runtime: ${line.trim()}`,
       );
     }
   }
+});
+
+/**
+ * The Originals are checked by playing them, not by reading their internals.
+ *
+ * The canvas records every draw call, so the harness sees exactly what a
+ * player sees — ship position, score, banners — and drives the games back
+ * through the runtime's own setButton. Nothing below reaches into private
+ * state, which is why these checks would survive a rewrite of either game.
+ */
+function recordingCanvas() {
+  const calls = [];
+  const gradient = { addColorStop() {} };
+  const context = new Proxy(
+    {},
+    {
+      get(target, prop) {
+        if (prop === 'createRadialGradient' || prop === 'createLinearGradient') {
+          return () => gradient;
+        }
+        if (prop in target) return target[prop];
+        return (...args) => { calls.push([prop, ...args]); };
+      },
+      set(target, prop, value) {
+        target[prop] = value;
+        calls.push(['=', prop, value]);
+        return true;
+      },
+    },
+  );
+  return {
+    width: 0,
+    height: 0,
+    getContext: () => context,
+    calls,
+    clear() { calls.length = 0; },
+  };
+}
+
+/** Holds buttons across frames, emitting only edges, like a real input source. */
+function pad(runtime) {
+  const held = new Set();
+  return {
+    set(player, wanted) {
+      const want = new Set(wanted.map((button) => `${player}:${button}`));
+      for (const key of want) {
+        if (!held.has(key)) {
+          held.add(key);
+          runtime.setButton(player, key.split(':')[1], true);
+        }
+      }
+      for (const key of [...held]) {
+        if (key.startsWith(`${player}:`) && !want.has(key)) {
+          held.delete(key);
+          runtime.setButton(player, key.split(':')[1], false);
+        }
+      }
+    },
+  };
+}
+
+const drift = require(`${OUT}/native/games/drift/index.js`);
+const ringOut = require(`${OUT}/native/games/ring-out/index.js`);
+const { PALETTE } = require(`${OUT}/native/games/palette.js`);
+
+/** Reads the Drift screen: where the ship is, which way it faces, the score. */
+function readDrift(calls) {
+  const view = { ship: null, angle: null, score: null, best: null, lost: null };
+  for (const [op, ...args] of calls) {
+    if (op === 'translate') view.ship = { x: args[0], y: args[1] };
+    else if (op === 'rotate') view.angle = args[0];
+    else if (op === 'fillText') {
+      const text = String(args[0]);
+      if (/^\d\d$/.test(text)) view.score = Number(text);
+      else if (text.startsWith('BEST ')) view.best = Number(text.slice(5));
+      else if (text === 'BURNED UP' || text === 'LOST IN SPACE') view.lost = text;
+      else if (text === 'NEW BEST') view.newBest = true;
+    }
+  }
+  return view;
+}
+
+/** Reads the Ring Out screen: both fighters, and whatever the banner says. */
+function readRingOut(calls) {
+  const view = { texts: [] };
+  let fill = null;
+  for (const [op, ...args] of calls) {
+    if (op === '=' && args[0] === 'fillStyle') fill = args[1];
+    else if (op === 'arc' && args[2] === 13) {
+      if (fill === PALETTE.lcd) view.p1 = { x: args[0], y: args[1] };
+      else if (fill === PALETTE.amber) view.p2 = { x: args[0], y: args[1] };
+    } else if (op === 'fillText') view.texts.push(String(args[0]));
+  }
+  return view;
+}
+
+async function bootGame(create, options = {}) {
+  const canvas = recordingCanvas();
+  const scheduler = testScheduler();
+  const runtime = new NativeGameRuntime({
+    canvas,
+    game: create(),
+    scheduler,
+    createAudio: () => null,
+    ...options,
+  });
+  await runtime.load();
+  runtime.start();
+  return { runtime, canvas, scheduler, buttons: pad(runtime) };
+}
+
+/** Advances one 60fps frame and returns what was drawn. */
+function step(session, read) {
+  session.canvas.clear();
+  session.scheduler.frame(16);
+  return read(session.canvas.calls);
+}
+
+console.log('\nDrift:');
+
+await check('doing nothing holds a stable orbit — gravity teaches itself', async () => {
+  const session = await bootGame(drift.default);
+  let view = null;
+  const radii = [];
+  for (let i = 0; i < 600; i += 1) {
+    view = step(session, readDrift);
+    if (view.ship) {
+      radii.push(Math.hypot(view.ship.x - drift.FIELD.center.x, view.ship.y - drift.FIELD.center.y));
+    }
+  }
+  assert.equal(view.lost, null, 'still flying after ten seconds');
+  assert.ok(Math.min(...radii) > 95 && Math.max(...radii) < 125, `orbit held: ${Math.min(...radii).toFixed(0)}–${Math.max(...radii).toFixed(0)}`);
+});
+
+await check('thrust is the only thing that changes the orbit', async () => {
+  const session = await bootGame(drift.default);
+  session.buttons.set(0, ['a']);
+  let view = null;
+  for (let i = 0; i < 60; i += 1) view = step(session, readDrift);
+  const radius = Math.hypot(view.ship.x - drift.FIELD.center.x, view.ship.y - drift.FIELD.center.y);
+  assert.ok(radius > drift.FIELD.startOrbit + 20, `thrust climbed to ${radius.toFixed(0)}`);
+});
+
+await check('over-thrusting loses the ship, and the run ends', async () => {
+  const session = await bootGame(drift.default);
+  session.buttons.set(0, ['a']);
+  let view = null;
+  for (let i = 0; i < 1200 && !view?.lost; i += 1) view = step(session, readDrift);
+  assert.equal(view.lost, 'LOST IN SPACE');
+});
+
+/**
+ * Flies the ship by looking at the screen. It reads the drawn position and
+ * heading, holds a circular orbit and walks that orbit's radius toward the
+ * next core, steering with the same two buttons a person has.
+ *
+ * Aiming straight at the core does not work, which is the game working: a
+ * direct line passes through the star, and gravity wins. That the autopilot
+ * has to fly orbits is evidence the physics is doing something.
+ */
+function fly(view, previous, dt) {
+  if (!view.ship || view.angle === null) return [];
+  const center = drift.FIELD.center;
+  const target = drift.coreAt(view.score ?? 0);
+  const targetRadius = Math.hypot(target.x - center.x, target.y - center.y);
+
+  const velocity = previous
+    ? { x: (view.ship.x - previous.x) / dt, y: (view.ship.y - previous.y) / dt }
+    : { x: 0, y: 0 };
+
+  const outX = view.ship.x - center.x;
+  const outY = view.ship.y - center.y;
+  const radius = Math.max(Math.hypot(outX, outY), 1);
+  const radial = { x: outX / radius, y: outY / radius };
+  const tangent = { x: -radial.y, y: radial.x };
+  const spin = Math.sign(velocity.x * tangent.x + velocity.y * tangent.y) || 1;
+
+  // Circular speed at the CURRENT radius: in a circular orbit gravity already
+  // does the work, so a settled autopilot asks for no thrust at all.
+  const orbitSpeed = Math.sqrt(drift.FIELD.mu / radius);
+  const closing = Math.max(-28, Math.min(28, (targetRadius - radius) * 0.6));
+  const wanted = {
+    x: tangent.x * spin * orbitSpeed + radial.x * closing,
+    y: tangent.y * spin * orbitSpeed + radial.y * closing,
+  };
+
+  const need = { x: (wanted.x - velocity.x) / 0.45, y: (wanted.y - velocity.y) / 0.45 };
+  if (Math.hypot(need.x, need.y) < 6) return [];
+
+  let error = Math.atan2(need.y, need.x) - view.angle;
+  while (error > Math.PI) error -= Math.PI * 2;
+  while (error < -Math.PI) error += Math.PI * 2;
+
+  const buttons = [];
+  if (error > 0.05) buttons.push('right');
+  else if (error < -0.05) buttons.push('left');
+  if (Math.abs(error) < 0.35) buttons.push('a');
+  return buttons;
+}
+
+let driftSave = null;
+
+await check('cores can be collected, and the score counts them', async () => {
+  const session = await bootGame(drift.default);
+  let view = step(session, readDrift);
+  let previous = view.ship;
+  for (let i = 0; i < 3600 && (view.score ?? 0) < 3; i += 1) {
+    session.buttons.set(0, fly(view, previous, 1 / 62.5));
+    previous = view.ship;
+    view = step(session, readDrift);
+  }
+  assert.equal(view.lost, null, 'survived the run');
+  assert.ok((view.score ?? 0) >= 3, `collected ${view.score} cores`);
+  assert.equal(view.best, view.score, 'best tracks the run while it is the best');
+  driftSave = session.runtime.readSave();
+  assert.ok(driftSave && driftSave.byteLength > 0, 'a save was produced');
+});
+
+await check('the best score comes back on a later visit', async () => {
+  const session = await bootGame(drift.default);
+  assert.equal(session.runtime.loadSave(driftSave), true);
+  const view = step(session, readDrift);
+  assert.ok(view.best >= 3, `best restored as ${view.best}`);
+  assert.equal(view.score, 0, 'but the run itself starts fresh');
+});
+
+await check('a corrupt or absurd save is ignored rather than shown as a record', async () => {
+  const session = await bootGame(drift.default);
+  const absurd = new Uint8Array([1, 0xff, 0xff, 0xff, 0xff]);
+  session.runtime.loadSave(absurd);
+  const view = step(session, readDrift);
+  assert.equal(view.best, 0);
+});
+
+await check('a lost run restarts on A, keeping the best score', async () => {
+  const session = await bootGame(drift.default);
+  session.runtime.loadSave(driftSave);
+  session.buttons.set(0, ['a']);
+  let view = null;
+  for (let i = 0; i < 1200 && !view?.lost; i += 1) view = step(session, readDrift);
+  assert.ok(view.lost, 'run ended');
+
+  session.buttons.set(0, []);
+  for (let i = 0; i < 60; i += 1) view = step(session, readDrift);
+  session.buttons.set(0, ['a']);
+  view = step(session, readDrift);
+  session.buttons.set(0, []);
+  view = step(session, readDrift);
+
+  assert.equal(view.lost, null, 'flying again');
+  assert.equal(view.score, 0, 'new run');
+  assert.ok(view.best >= 3, 'best kept');
+});
+
+console.log('\nRing Out:');
+
+await check('needs two players, and the runtime gives it two', async () => {
+  const session = await bootGame(ringOut.default);
+  assert.equal(session.runtime.players, 2);
+});
+
+await check('each player drives only their own fighter', async () => {
+  const session = await bootGame(ringOut.default);
+  let view = null;
+  for (let i = 0; i < 60; i += 1) view = step(session, readRingOut); // past READY
+  const start = { p1: view.p1, p2: view.p2 };
+
+  session.buttons.set(0, ['right']);
+  for (let i = 0; i < 30; i += 1) view = step(session, readRingOut);
+  assert.ok(view.p1.x > start.p1.x + 5, 'player one moved');
+  assert.ok(Math.abs(view.p2.x - start.p2.x) < 0.5, 'player two did not');
+
+  session.buttons.set(0, []);
+  session.buttons.set(1, ['up']);
+  const beforeP2 = view.p2.y;
+  for (let i = 0; i < 30; i += 1) view = step(session, readRingOut);
+  assert.ok(view.p2.y < beforeP2 - 5, 'player two moved on their own input');
+});
+
+await check('a dash is a burst, and it has a cooldown', async () => {
+  const session = await bootGame(ringOut.default);
+  let view = null;
+  for (let i = 0; i < 60; i += 1) view = step(session, readRingOut);
+
+  session.buttons.set(0, ['up', 'a']);
+  view = step(session, readRingOut);
+  const dashStart = view.p1.y;
+  for (let i = 0; i < 9; i += 1) view = step(session, readRingOut);
+  const dashed = dashStart - view.p1.y;
+
+  session.buttons.set(0, ['up']);
+  view = step(session, readRingOut);
+  session.buttons.set(0, ['up', 'a']); // immediate second press, still cooling down
+  const retryStart = view.p1.y;
+  for (let i = 0; i < 9; i += 1) view = step(session, readRingOut);
+  const retried = retryStart - view.p1.y;
+
+  assert.ok(dashed > 30, `dash covered ${dashed.toFixed(0)}px`);
+  assert.ok(retried < dashed * 0.75, `cooldown held the second dash back (${retried.toFixed(0)}px)`);
+});
+
+await check('the shrinking ring resolves a round, and the winner scores', async () => {
+  const session = await bootGame(ringOut.default);
+  let view = null;
+  for (let i = 0; i < 60; i += 1) view = step(session, readRingOut);
+  // Player one walks to the middle; player two stands still and the ring
+  // closes on them. No fighting required to prove a round can end.
+  session.buttons.set(0, ['right']);
+  for (let i = 0; i < 60; i += 1) view = step(session, readRingOut);
+  session.buttons.set(0, []);
+  for (let i = 0; i < 1200 && !view.texts.some((t) => t.endsWith('SCORES')); i += 1) {
+    view = step(session, readRingOut);
+  }
+  assert.ok(view.texts.includes('P1 SCORES'), `banner said: ${view.texts.join(', ')}`);
+});
+
+await check('three rounds decide a match, and either player can rematch', async () => {
+  const session = await bootGame(ringOut.default);
+  let view = null;
+  const seen = new Set();
+  for (let i = 0; i < 6000; i += 1) {
+    // Player one keeps to the middle; player two never moves, so the ring
+    // decides every round the same way.
+    session.buttons.set(0, view?.p1 && view.p1.x < 158 ? ['right'] : []);
+    view = step(session, readRingOut);
+    for (const text of view.texts) seen.add(text);
+    if (seen.has('P1 WINS')) break;
+  }
+  assert.ok(seen.has('P1 WINS'), 'match ended');
+
+  // Player two calls the rematch, which proves it is not player one's button.
+  for (let i = 0; i < 60; i += 1) view = step(session, readRingOut);
+  session.buttons.set(1, ['a']);
+  view = step(session, readRingOut);
+  session.buttons.set(1, []);
+  for (let i = 0; i < 5; i += 1) view = step(session, readRingOut);
+  assert.ok(view.texts.includes('READY'), `rematch started: ${view.texts.join(', ')}`);
+});
+
+await check('Ring Out has nothing to save, and says so', async () => {
+  const session = await bootGame(ringOut.default);
+  assert.equal(session.runtime.readSave(), null);
 });
 
 console.log(`\n${passed} native runtime checks pass`);
