@@ -189,6 +189,36 @@ const SHIP_POSE = `(() => {
   return { x: cx, y: cy, angle: Math.atan2(nose[1] - cy, nose[0] - cx), pixels: points.length };
 })()`;
 
+/**
+ * Presses something and reports what moved.
+ *
+ * Ring Out is always mid-round: between rounds the banner is up and input is
+ * deliberately ignored, so a single press can land in a dead window and say
+ * nothing about whether the input works. This retries across that window
+ * rather than lowering the bar — it still has to move, it just gets a few
+ * chances to be asked at a moment the game is listening.
+ */
+async function movesWhen({ press, read, other, expect, attempts = 4 }) {
+  let last = 'never on screen';
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    const before = await read();
+    const otherBefore = other ? await other() : null;
+    if (before?.count) {
+      await press();
+      const after = await read();
+      const otherAfter = other ? await other() : null;
+      if (after?.count && expect(before, after)) {
+        return { before, after, otherBefore, otherAfter };
+      }
+      if (after?.count) {
+        last = `moved ${(after.x - before.x).toFixed(0)},${(after.y - before.y).toFixed(0)}`;
+      }
+    }
+    await sleep(1700); // outlast a round change
+  }
+  throw new Error(last);
+}
+
 let passed = 0;
 const failures = [];
 
@@ -203,9 +233,29 @@ async function check(name, body) {
   }
 }
 
+/**
+ * A server left over from an earlier run answers on the port but serves an
+ * older build, whose chunk filenames no longer exist. The pages still render
+ * server-side, so the library checks pass and every check that needs client
+ * JavaScript fails — an hour of debugging the wrong thing. Refuse to start.
+ */
+const portBusy = await new Promise((resolve) => {
+  const socket = net.connect(PORT, '127.0.0.1');
+  socket.on('connect', () => { socket.end(); resolve(true); });
+  socket.on('error', () => resolve(false));
+});
+if (portBusy) {
+  console.log(`Something is already listening on ${PORT}. Stop it first — a stale`);
+  console.log('server serves an old build and turns these checks into nonsense.');
+  process.exit(1);
+}
+
+// Detached so the whole process group can be killed: `npm run start` spawns
+// next-server as a child, and killing npm alone leaves the server running.
 const server = spawn('npm', ['run', 'start', '--', '--port', String(PORT)], {
   cwd: REPO,
   stdio: 'ignore',
+  detached: true,
 });
 const browser = spawn(
   chrome,
@@ -222,11 +272,20 @@ const browser = spawn(
   { stdio: 'ignore' },
 );
 
+let stopped = false;
 const shutdown = () => {
-  server.kill('SIGTERM');
-  browser.kill('SIGTERM');
+  if (stopped) return;
+  stopped = true;
+  try {
+    process.kill(-server.pid, 'SIGKILL');
+  } catch {
+    server.kill('SIGKILL');
+  }
+  browser.kill('SIGKILL');
 };
 process.on('exit', shutdown);
+process.on('SIGINT', () => process.exit(130));
+process.on('SIGTERM', () => process.exit(143));
 
 try {
   await waitForPort(PORT);
@@ -244,6 +303,39 @@ try {
   const page = new Session(socket);
   await page.send('Page.enable');
   await page.send('Runtime.enable');
+
+  /**
+   * A controller the test can drive. Headless Chromium exposes no real pads,
+   * so this stands in for the device while leaving everything above it — the
+   * polling, the standard-mapping indexes, slot assignment, the router — as
+   * the real code. Installed before any navigation so the app never sees a
+   * page without it.
+   */
+  await page.send('Page.addScriptToEvaluateOnNewDocument', {
+    source: `(() => {
+      const pads = [];
+      Object.defineProperty(navigator, 'getGamepads', {
+        value: () => pads.slice(),
+        configurable: true,
+      });
+      window.__padConnect = (index, id) => {
+        pads[index] = {
+          index, id, mapping: 'standard', connected: true,
+          buttons: Array.from({ length: 17 }, () => ({ pressed: false, value: 0 })),
+          axes: [0, 0, 0, 0],
+        };
+        window.dispatchEvent(new Event('gamepadconnected'));
+      };
+      window.__padPress = (index, button, down) => {
+        const pad = pads[index];
+        if (pad) pad.buttons[button] = { pressed: down, value: down ? 1 : 0 };
+      };
+      window.__padDisconnect = (index) => {
+        delete pads[index];
+        window.dispatchEvent(new Event('gamepaddisconnected'));
+      };
+    })()`,
+  });
 
   const base = `http://127.0.0.1:${PORT}`;
 
@@ -459,33 +551,24 @@ try {
     }
     await sleep(1000); // past the READY banner
 
-    const at = (name, reading) => {
-      if (!reading || !reading.count) throw new Error(`${name} was not on screen`);
-      return reading;
-    };
-
     // Short presses on purpose: the floor is slippery and the ring is not
     // wide, so a long hold would just knock the fighter out of the arena.
-    const p1Before = at('player one', await green());
-    const p2Before = at('player two', await amber());
-    await page.hold(KEYS.right, 300);
-    const p1After = at('player one', await green());
-    const p2After = at('player two', await amber());
-
-    if (!(p1After.x > p1Before.x + 4)) {
-      throw new Error(`player one did not move (${p1Before.x.toFixed(0)} -> ${p1After.x.toFixed(0)})`);
-    }
-    if (Math.abs(p2After.x - p2Before.x) > 2) {
-      throw new Error(`player two moved on player one's input (${p2Before.x.toFixed(0)} -> ${p2After.x.toFixed(0)})`);
+    const one = await movesWhen({
+      press: () => page.hold(KEYS.right, 300),
+      read: green,
+      other: amber,
+      expect: (before, after) => after.x > before.x + 4,
+    });
+    if (Math.abs(one.otherAfter.x - one.otherBefore.x) > 2) {
+      throw new Error("player two moved on player one's input");
     }
 
     await sleep(900); // let the slide settle
-    const p2Start = at('player two', await amber());
-    await page.hold(KEYS.w, 300);
-    const p2End = at('player two', await amber());
-    if (!(p2End.y < p2Start.y - 4)) {
-      throw new Error(`player two did not respond to W (${p2Start.y.toFixed(0)} -> ${p2End.y.toFixed(0)})`);
-    }
+    await movesWhen({
+      press: () => page.hold(KEYS.w, 300),
+      read: amber,
+      expect: (before, after) => after.y < before.y - 4,
+    });
     await page.shot('ring-out');
   });
 
@@ -494,6 +577,117 @@ try {
       `document.querySelector('[data-testid="couch-hint"]')?.textContent ?? ''`,
     );
     if (!/two controllers/i.test(hint)) throw new Error(`hint said: ${hint}`);
+  });
+
+  console.log('\nControllers:');
+
+  // Standard-mapping indexes, by physical position (D-010).
+  const PAD = { south: 0, east: 1, left: 14, right: 15, up: 12, down: 13 };
+
+  await check('a pad at browser index 3 still drives player one', async () => {
+    await page.goto(`${base}/games/drift`);
+    await sleep(1500);
+    // Deliberately not index 0: a pad that sleeps and comes back lands
+    // wherever the browser puts it, and that must not decide who you are.
+    await page.evaluate(`window.__padConnect(3, 'Verification Pad A')`);
+    await sleep(400);
+
+    const radiusNow = async () => {
+      const ship = await page.evaluate(SHIP_POSE);
+      return Math.hypot(ship.x - 160, ship.y - 144);
+    };
+    const before = await radiusNow();
+    await page.evaluate(`window.__padPress(3, ${PAD.east}, true)`);
+    await sleep(1400);
+    await page.evaluate(`window.__padPress(3, ${PAD.east}, false)`);
+    const after = await radiusNow();
+
+    if (Math.abs(after - before) < 25) {
+      throw new Error(`the pad moved the orbit only ${Math.abs(after - before).toFixed(0)}px`);
+    }
+    await page.shot('gamepad-drift');
+  });
+
+  await check('two pads take player one and player two, in slot order', async () => {
+    await page.goto(`${base}/games/ring-out`);
+    const green = () => page.evaluate(CENTROID('[data-testid="native-screen"]', '#9bbc0f', 40));
+    const amber = () => page.evaluate(CENTROID('[data-testid="native-screen"]', '#e0a33e', 40));
+
+    const ready = Date.now() + 12_000;
+    for (;;) {
+      const seen = await green();
+      if (seen && seen.count > 20) break;
+      if (Date.now() > ready) throw new Error('the game never appeared');
+      await sleep(200);
+    }
+    await page.evaluate(`window.__padConnect(2, 'Verification Pad A')`);
+    await page.evaluate(`window.__padConnect(5, 'Verification Pad B')`);
+    await sleep(1000);
+
+    const tap = (index, button, ms = 300) => async () => {
+      await page.evaluate(`window.__padPress(${index}, ${button}, true)`);
+      await sleep(ms);
+      await page.evaluate(`window.__padPress(${index}, ${button}, false)`);
+    };
+
+    const first = await movesWhen({
+      press: tap(2, PAD.right),
+      read: green,
+      other: amber,
+      expect: (before, after) => after.x > before.x + 4,
+    });
+    if (Math.abs(first.otherAfter.x - first.otherBefore.x) > 2) {
+      throw new Error('the first pad moved player two too');
+    }
+
+    await sleep(900);
+    await movesWhen({
+      press: tap(5, PAD.up),
+      read: amber,
+      expect: (before, after) => after.y < before.y - 4,
+    });
+    await page.shot('gamepad-ring-out');
+  });
+
+  await check('yanking a pad mid-press does not leave a button held down', async () => {
+    const amber = () => page.evaluate(CENTROID('[data-testid="native-screen"]', '#e0a33e', 40));
+    await sleep(700);
+    await page.evaluate(`window.__padPress(5, ${PAD.down}, true)`);
+    await sleep(250);
+    // Unplugged while still holding down.
+    await page.evaluate(`window.__padDisconnect(5)`);
+    await sleep(1200); // long enough for the slide to bleed off
+
+    const settled = await amber();
+    await sleep(600);
+    const later = await amber();
+    const stillMoving = Math.hypot(later.x - settled.x, later.y - settled.y);
+    if (stillMoving > 25) {
+      throw new Error(`player two kept moving ${stillMoving.toFixed(0)}px after the pad was pulled`);
+    }
+  });
+
+  await check('the same pad coming back gets its player slot back', async () => {
+    const green = () => page.evaluate(CENTROID('[data-testid="native-screen"]', '#9bbc0f', 40));
+    const amber = () => page.evaluate(CENTROID('[data-testid="native-screen"]', '#e0a33e', 40));
+    // Same id, different browser index — the case that breaks positional
+    // assignment and the reason slots are held by id.
+    await page.evaluate(`window.__padConnect(7, 'Verification Pad B')`);
+    await sleep(700);
+
+    const returning = await movesWhen({
+      press: async () => {
+        await page.evaluate(`window.__padPress(7, ${PAD.right}, true)`);
+        await sleep(300);
+        await page.evaluate(`window.__padPress(7, ${PAD.right}, false)`);
+      },
+      read: amber,
+      other: green,
+      expect: (before, after) => after.x > before.x + 4,
+    });
+    if (Math.abs(returning.otherAfter.x - returning.otherBefore.x) > 2) {
+      throw new Error('it drove player one instead');
+    }
   });
 
   console.log('\nRetro, still working:');
@@ -556,6 +750,33 @@ try {
     const deck = await page.evaluate(`!!document.querySelector('.touch-dpad')`);
     if (!deck) throw new Error('no touch controls appeared');
     await page.shot('handheld-retro');
+  });
+
+  await check('a retro game responds to the touch deck, not just to showing it', async () => {
+    const snapshot = () => page.evaluate(`(() => {
+      const canvas = document.querySelector('[data-testid="gb-screen"]');
+      const { data } = canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height);
+      let hash = 0;
+      for (let i = 0; i < data.length; i += 37) hash = (hash * 31 + data[i]) | 0;
+      return hash;
+    })()`);
+    const spot = await page.evaluate(`(() => {
+      const button = document.querySelector('[data-button="start"]');
+      if (!button) return null;
+      const box = button.getBoundingClientRect();
+      return { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+    })()`);
+    if (!spot) throw new Error('no start button on the deck');
+
+    const before = await snapshot();
+    await page.send('Input.dispatchTouchEvent', {
+      type: 'touchStart',
+      touchPoints: [{ x: spot.x, y: spot.y }],
+    });
+    await sleep(900);
+    await page.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+    await sleep(400);
+    if ((await snapshot()) === before) throw new Error('touching Start changed nothing');
   });
 
   await check('Drift gets the same deck, and Ring Out says it cannot', async () => {
