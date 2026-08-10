@@ -221,6 +221,9 @@ body {
    phone the slack goes to the deck, which makes the controls more comfortable
    rather than leaving dead space. */
 .handheld__deck {
+  /* Positioned so the device-face overlay below anchors to the deck. Without
+     this it escapes to the nearest positioned ancestor and washes the screen. */
+  position: relative;
   flex: 1 1 auto;
   min-height: clamp(220px, 40vh, 340px);
   max-height: 420px;
@@ -264,15 +267,36 @@ body {
   }
 }
 
+/**
+ * Control deck.
+ *
+ * Proportions come from DMG hardware rather than taste: a face button is about
+ * half the D-pad's width (10.5mm vs 20mm), and A/B sit on a ~26deg axis close
+ * enough to roll a thumb between them — that roll is the whole reason the slant
+ * exists. Everything derives from --dpad-size so the relationships hold at any
+ * screen size.
+ *
+ * We swapped sides (actions left, D-pad right), so the roll axis is mirrored
+ * too: DMG puts A at the outer, upper position for the right thumb, which for a
+ * left thumb means upper-LEFT. Mirroring the coordinates without mirroring the
+ * axis would leave the diagonal fighting the hand using it.
+ */
 .touch-deck {
+  --dpad-size: clamp(132px, 38vw, 168px);
+  --btn-size: calc(var(--dpad-size) * 0.52);
+  --btn-gap: 0.39;
+
   position: relative;
   height: 100%;
   width: 100%;
   display: grid;
   grid-template-columns: 1fr 1fr;
-  grid-template-rows: 1fr auto;
+  /* Rows size to content and the whole block centres, so the controls read as
+     one face rather than clusters pinned to opposite ends of a tall box. */
+  grid-template-rows: auto auto;
+  align-content: center;
   align-items: center;
-  gap: 0.5rem;
+  gap: 1.5rem 0.5rem;
   padding: 0.75rem 1.25rem;
   user-select: none;
   -webkit-user-select: none;
@@ -280,13 +304,26 @@ body {
   touch-action: none;
 }
 
+/* A faint device face, so the controls sit on something rather than floating
+   on the page. One hairline and a barely-there wash — no drawn plastic. */
+.handheld__deck::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgb(255 255 255 / 2.5%), transparent 45%);
+  border-top: 1px solid var(--gbs-border);
+  pointer-events: none;
+}
+
 .touch-deck__cluster {
   display: flex;
   align-items: center;
   justify-content: center;
 }
-.touch-deck__cluster--left { justify-content: flex-start; }
-.touch-deck__cluster--right { justify-content: flex-end; }
+/* Centred in their columns, not pinned to the edges: the tilted recess extends
+   past the button bounds, and centring keeps that bleed inside the screen. */
+.touch-deck__cluster--left { justify-content: center; }
+.touch-deck__cluster--right { justify-content: center; }
 
 .touch-deck__menu {
   grid-column: 1 / -1;
@@ -297,9 +334,22 @@ body {
 
 @media (orientation: landscape) {
   .touch-deck {
-    /* Bias everything low — the natural thumb arc, not the vertical centre. */
+    /* Bias everything low — the natural thumb arc, not the vertical centre.
+       align-content, not just align-items: the rows are content-sized, so the
+       whole block would otherwise centre itself in the viewport. */
+    align-content: end;
     align-items: end;
-    padding: 0 1rem calc(1rem + env(safe-area-inset-bottom));
+    padding: 0 1.25rem calc(1rem + env(safe-area-inset-bottom));
+  }
+  /* Hug the outer edges. The game is height-bound and centred, so the gutters
+     are where the thumbs — and therefore the controls — belong. Portrait
+     centres instead, because there the deck owns the full width. */
+  .touch-deck__cluster--left {
+    justify-content: flex-start;
+    padding-left: calc(var(--btn-size) * 0.2);
+  }
+  .touch-deck__cluster--right {
+    justify-content: flex-end;
   }
   /* Only the controls take input; the gap between them shows the game. */
   .touch-deck__cluster,
@@ -318,9 +368,10 @@ body {
 
 .touch-dpad {
   position: relative;
-  width: clamp(132px, 38vw, 168px);
+  width: var(--dpad-size);
   aspect-ratio: 1;
   flex: 0 0 auto;
+  filter: drop-shadow(0 2px 3px rgb(0 0 0 / 45%));
 }
 
 .touch-dpad__arm {
@@ -329,8 +380,8 @@ body {
   border-radius: 0.5rem;
   box-shadow: inset 0 0 0 1px var(--gbs-border);
 }
-.touch-dpad__arm--v { left: 33.3%; right: 33.3%; top: 0; bottom: 0; }
-.touch-dpad__arm--h { top: 33.3%; bottom: 33.3%; left: 0; right: 0; }
+.touch-dpad__arm--v { left: 32%; right: 32%; top: 0; bottom: 0; }
+.touch-dpad__arm--h { top: 32%; bottom: 32%; left: 0; right: 0; }
 
 .touch-dpad__pad {
   position: absolute;
@@ -343,10 +394,10 @@ body {
 .touch-dpad__pad[data-down='true'] {
   transition: none;
 }
-.touch-dpad__pad--up    { left: 33.3%; right: 33.3%; top: 0; height: 33.3%; }
-.touch-dpad__pad--down  { left: 33.3%; right: 33.3%; bottom: 0; height: 33.3%; }
-.touch-dpad__pad--left  { top: 33.3%; bottom: 33.3%; left: 0; width: 33.3%; }
-.touch-dpad__pad--right { top: 33.3%; bottom: 33.3%; right: 0; width: 33.3%; }
+.touch-dpad__pad--up    { left: 32%; right: 32%; top: 0; height: 34%; }
+.touch-dpad__pad--down  { left: 32%; right: 32%; bottom: 0; height: 34%; }
+.touch-dpad__pad--left  { top: 32%; bottom: 32%; left: 0; width: 34%; }
+.touch-dpad__pad--right { top: 32%; bottom: 32%; right: 0; width: 34%; }
 .touch-dpad__pad[data-down='true'] { background: var(--gbs-lcd-deep); }
 
 .touch-dpad__hub {
@@ -368,55 +419,130 @@ body {
   font-family: var(--font-mono), monospace;
   color: var(--gbs-text-muted);
   background: var(--gbs-surface-raised);
-  box-shadow: inset 0 0 0 1px var(--gbs-border);
+  /* A lit top rim and a dropped shadow read as a moulded key. Two shadows, no
+     gloss — enough to feel physical without becoming a drawn plastic shell. */
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 7%),
+    inset 0 0 0 1px var(--gbs-border),
+    0 2px 3px rgb(0 0 0 / 45%);
   /* Press feedback must be instant — no transition on the way in. */
-  transition: transform 90ms ease-out, background-color 90ms ease-out;
+  transition: transform 90ms ease-out, background-color 90ms ease-out,
+    box-shadow 90ms ease-out;
   touch-action: none;
 }
 
 .touch-btn--round {
-  width: clamp(60px, 17vw, 74px);
+  width: var(--btn-size);
   aspect-ratio: 1;
   border-radius: 50%;
-  font-size: 0.95rem;
+  font-size: calc(var(--btn-size) * 0.26);
   letter-spacing: 0.02em;
 }
 
-/* A above and right of B — the relative arrangement is muscle memory and is
-   preserved now that the cluster sits on the left of the deck. */
-.touch-btn--a { transform: translateY(-16%); }
-.touch-btn--b { transform: translateY(16%); margin-right: 0.75rem; }
+/**
+ * A/B housing. The pair is one control, so it gets one recess — this is what
+ * stops them reading as two unrelated circles.
+ *
+ * Box is 2.25 x 1.6 button diameters, so the centres are offset (1.25, 0.6) —
+ * a 26deg axis with an edge gap of ~0.39d, close enough to roll a thumb across.
+ */
+.touch-actions {
+  position: relative;
+  width: calc(var(--btn-size) * 2.25);
+  height: calc(var(--btn-size) * 1.6);
+  flex: 0 0 auto;
+}
 
-.touch-btn--pill {
-  min-width: 84px;
-  /* 44px floor applies to these too, even though they are used rarely. */
-  min-height: 44px;
+/**
+ * The recess is a capsule laid along the roll axis, not a rotated bounding box.
+ * Rotating the containing rectangle inflates it badly (~2.7 diameters wide) and
+ * bleeds off a phone edge; a capsule sized to the two circles stays tight and
+ * actually traces the motion the thumb makes.
+ */
+.touch-actions::before {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: calc(var(--btn-size) * 2.42);
+  height: calc(var(--btn-size) * 1.16);
   border-radius: 999px;
-  font-size: 0.6rem;
-  letter-spacing: 0.12em;
+  background: rgb(0 0 0 / 16%);
+  box-shadow: inset 0 1px 1px rgb(0 0 0 / 30%), inset 0 -1px 0 rgb(255 255 255 / 3%);
+  transform: translate(-50%, -50%) rotate(26deg);
+  pointer-events: none;
+}
+
+/* Mirrored from DMG: A is the outer, upper button — which is upper-LEFT once
+   the cluster moves to the left of the deck. */
+.touch-btn--a { position: absolute; left: 0; top: 0; }
+.touch-btn--b { position: absolute; right: 0; bottom: 0; }
+
+/* Start and Select are secondary on real hardware: much smaller, set low and
+   central. The visual pill shrinks; the touch target stays 44px via padding. */
+/**
+ * Start and Select are secondary on real hardware: much smaller, set low and
+ * central. The hit area stays a full 44px while the drawn pill is ~28px — the
+ * "hit area may exceed visual bounds" rule, finally earning its keep. The pill
+ * is a pseudo-element so its rim and shadow follow the visual, not the target.
+ */
+.touch-btn--pill {
+  position: relative;
+  isolation: isolate;
+  min-width: 76px;
+  min-height: 44px;
+  background: none;
+  box-shadow: none;
+  font-size: 0.58rem;
+  letter-spacing: 0.14em;
+  transform: rotate(-9deg);
+}
+
+.touch-btn--pill::before {
+  content: '';
+  position: absolute;
+  inset: 8px 0;
+  z-index: -1;
+  border-radius: 999px;
+  background: var(--gbs-surface-raised);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 7%),
+    inset 0 0 0 1px var(--gbs-border),
+    0 2px 3px rgb(0 0 0 / 45%);
+  transition: background-color 90ms ease-out, box-shadow 90ms ease-out;
+}
+
+.touch-btn--pill[data-down='true']::before {
+  background: var(--gbs-lcd-deep);
+  box-shadow:
+    inset 0 2px 3px rgb(0 0 0 / 55%),
+    inset 0 0 0 1px var(--gbs-lcd-shadow);
+  transition: none;
 }
 
 .touch-btn[data-down='true'] {
   background: var(--gbs-lcd-deep);
   color: var(--gbs-lcd);
+  /* Pressed reads as recessed: rim light off, shadow pulled in. */
+  box-shadow:
+    inset 0 2px 3px rgb(0 0 0 / 55%),
+    inset 0 0 0 1px var(--gbs-lcd-shadow);
   transition: none;
 }
-.touch-btn--round[data-down='true'] { transform: scale(0.92); }
-.touch-btn--a[data-down='true'] { transform: translateY(-16%) scale(0.92); }
-.touch-btn--b[data-down='true'] { transform: translateY(16%) scale(0.92); }
+.touch-btn--round[data-down='true'] { transform: translateY(1px) scale(0.94); }
+.touch-btn--pill[data-down='true'] { transform: rotate(-9deg) translateY(1px); }
 
 /* Landscape control sizing. Must come after the base rules above — an earlier
    media query loses to a later rule of equal specificity. Controls are sized to
    stay inside the gutters so they never cover the game. */
 @media (orientation: landscape) {
-  .touch-dpad {
-    width: clamp(112px, 19vh, 150px);
-  }
-  .touch-btn--round {
-    width: clamp(52px, 14vh, 66px);
+  /* Only the base size changes; every proportion derives from it, so the
+     hardware relationships survive the orientation change. */
+  .touch-deck {
+    --dpad-size: clamp(112px, 19vh, 150px);
   }
   .touch-btn--pill {
-    min-width: 70px;
+    min-width: 66px;
     min-height: 44px;
   }
 }

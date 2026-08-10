@@ -246,30 +246,33 @@ export function TouchControls({
       className={`touch-deck ${className}`}
       aria-hidden="true"
     >
-      {/* Actions on the left, D-pad on the right. */}
+      {/* Actions on the left, D-pad on the right. The pair sits in one housing
+          so it reads as a single control, not two floating circles. */}
       <div className="touch-deck__cluster touch-deck__cluster--left">
-        <button
-          type="button"
-          tabIndex={-1}
-          data-control="b"
-          data-kind="round"
-          data-button="b"
-          data-down="false"
-          className="touch-btn touch-btn--round touch-btn--b"
-        >
-          B
-        </button>
-        <button
-          type="button"
-          tabIndex={-1}
-          data-control="a"
-          data-kind="round"
-          data-button="a"
-          data-down="false"
-          className="touch-btn touch-btn--round touch-btn--a"
-        >
-          A
-        </button>
+        <div className="touch-actions">
+          <button
+            type="button"
+            tabIndex={-1}
+            data-control="a"
+            data-kind="round"
+            data-button="a"
+            data-down="false"
+            className="touch-btn touch-btn--round touch-btn--a"
+          >
+            A
+          </button>
+          <button
+            type="button"
+            tabIndex={-1}
+            data-control="b"
+            data-kind="round"
+            data-button="b"
+            data-down="false"
+            className="touch-btn touch-btn--round touch-btn--b"
+          >
+            B
+          </button>
+        </div>
       </div>
 
       <div className="touch-deck__cluster touch-deck__cluster--right">
