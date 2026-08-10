@@ -22,6 +22,7 @@ import { bindKeyboard } from '@/input/keyboard';
 import { bindGamepad, type GamepadInfo } from '@/input/gamepad';
 import { InputRouter } from '@/input/InputRouter';
 import { TouchControls } from '@/components/TouchControls';
+import { BootOverlay } from '@/components/BootOverlay';
 import { readSave, writeSave } from '@/emulation/core/saveStorage';
 import { playActivity } from '@/storage/playActivity';
 
@@ -310,16 +311,7 @@ export function GameBoyPlayer({ source, title }: GameBoyPlayerProps) {
             </div>
           ) : null}
 
-          {status !== 'error' && !booted ? (
-            <div
-              data-testid="boot-state"
-              className="absolute inset-0 flex items-center justify-center rounded bg-black"
-            >
-              <span className="loading-dots text-xs tracking-widest text-faint">
-                <i /><i /><i />
-              </span>
-            </div>
-          ) : null}
+          {status !== 'error' ? <BootOverlay ready={booted} /> : null}
 
           {status === 'ready' && !started ? (
             <button
