@@ -28,7 +28,8 @@ import { bindGamepad, type GamepadInfo } from '@/input/gamepad';
 import { TouchControls } from '@/components/TouchControls';
 import { BootOverlay } from '@/components/BootOverlay';
 import { InvitePanel } from '@/components/InvitePanel';
-import { relayConfigured, useHostRoom } from '@/net/useHostRoom';
+import { useHostRoom } from '@/net/useHostRoom';
+import { relayConfigured } from '@/net/relayConfig';
 import { readSave, writeSave } from '@/emulation/core/saveStorage';
 import { playActivity } from '@/storage/playActivity';
 

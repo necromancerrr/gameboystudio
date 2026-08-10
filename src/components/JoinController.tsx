@@ -20,8 +20,7 @@ import { TouchControls } from '@/components/TouchControls';
 import { GuestLink, type GuestSeat } from '@/net/GuestLink';
 import { WebSocketTransport, type TransportState } from '@/net/RemoteTransport';
 import { CODE_LENGTH, isRoomCode } from '@/net/protocol';
-
-const RELAY_URL = process.env.NEXT_PUBLIC_RELAY_URL ?? '';
+import { RELAY_URL, relayUrlIsUsable } from '@/net/relayConfig';
 
 type Rejection = 'full' | 'no-room' | 'bad-version' | 'closed';
 
@@ -54,7 +53,7 @@ export function JoinController() {
   }, []);
 
   useEffect(() => {
-    if (!connected || !isRoomCode(code) || !RELAY_URL) return;
+    if (!connected || !isRoomCode(code) || !relayUrlIsUsable()) return;
 
     const link = new GuestLink({
       transport: new WebSocketTransport(`${RELAY_URL}/join?code=${code}`),

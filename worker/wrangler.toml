@@ -15,9 +15,21 @@ tag = "v1"
 new_classes = ["RoomDurableObject"]
 
 [vars]
-# Comma-separated. Empty means "allow any origin", which is only correct for
-# local development — a real deployment must set this.
-ALLOWED_ORIGINS = ""
+# Comma-separated exact origins allowed to open or join a room.
+#
+# Empty would mean "allow any origin", which is only correct for local
+# development. A room code is a capability, and an unrestricted relay is one any
+# page on the internet could point at.
+#
+# Vercel preview deployments get their own generated origins, so a preview build
+# cannot open rooms until its origin is added here. That is the intended
+# trade — a wildcard would defeat the check.
+#
+# `npm run relay:dev` overrides this to empty on the command line, so local
+# pages and the latency script (which sends no Origin header at all) still
+# connect. The committed value is the production one, so a deploy that forgets
+# to think about origins is still safe.
+ALLOWED_ORIGINS = "https://gameboy-jet.vercel.app"
 
 [observability]
 enabled = true

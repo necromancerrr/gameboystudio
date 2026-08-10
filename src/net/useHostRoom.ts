@@ -15,15 +15,7 @@ import type { PlayerIndex } from '@/input/InputRouter';
 import type { PlayerSlots } from '@/input/PlayerSlots';
 import { HostRoom } from './HostRoom';
 import { WebSocketTransport, type TransportState } from './RemoteTransport';
-
-/**
- * Where the relay lives. Unset means the feature is simply not offered, which
- * is the right behaviour for a build that has no Worker deployed rather than
- * an Invite button that fails when pressed.
- */
-const RELAY_URL = process.env.NEXT_PUBLIC_RELAY_URL ?? '';
-
-export const relayConfigured = RELAY_URL.length > 0;
+import { RELAY_URL, relayUrlIsUsable } from './relayConfig';
 
 export interface HostRoomHandle {
   code: string | null;
@@ -75,7 +67,7 @@ export function useHostRoom({
   }, []);
 
   const open = useCallback(() => {
-    if (roomRef.current || !relayConfigured) return;
+    if (roomRef.current || !relayUrlIsUsable()) return;
     setState('connecting');
     const room = new HostRoom({
       transport: new WebSocketTransport(`${RELAY_URL}/host`),
