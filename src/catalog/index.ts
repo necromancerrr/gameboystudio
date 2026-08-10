@@ -50,6 +50,16 @@ export function getConsoles(): ConsoleId[] {
   return order.filter((id) => GAMES.some((game) => game.console === id));
 }
 
+/**
+ * Games two or more people can play at once.
+ *
+ * `players.max` rather than `min`, so a game that also works solo still answers
+ * "what can the two of us play" — the question the facet exists for.
+ */
+export function isMultiplayer(game: Game): boolean {
+  return game.players.max > 1;
+}
+
 /** Other titles sharing a series, excluding the game itself. */
 export function getSeriesSiblings(game: Game): Game[] {
   if (!game.series) return [];

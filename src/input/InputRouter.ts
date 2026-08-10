@@ -12,7 +12,13 @@
 
 import { LOGICAL_BUTTONS, type LogicalButton } from '@/emulation/core/types';
 
-export type InputSource = 'keyboard' | 'gamepad' | 'touch';
+/**
+ * `remote` is a device in someone else's hands — a phone that joined the room.
+ * It is deliberately just another source: the host runs the only simulation, so
+ * a button arriving over the network is merged exactly like one from a pad, and
+ * neither the runtimes nor the games can tell the difference. See D-016.
+ */
+export type InputSource = 'keyboard' | 'gamepad' | 'touch' | 'remote';
 
 /** Zero-based. Player 0 is the only player a retro game ever sees. */
 export type PlayerIndex = number;

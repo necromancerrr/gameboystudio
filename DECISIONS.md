@@ -700,6 +700,15 @@ we would have to build regardless. For Ring Out's shoving physics the difference
 is not the product. Latency is measured against the real relay before any UI is
 built on it, and WebRTC is added only if the numbers justify it.
 
+Measured 2026-08-10 against a local `wrangler dev`, 200 round trips
+(`npm run measure:latency`): round trip mean 2.1ms, p50 1.7ms, p95 4.0ms — so
+one way is about 1ms. That is the protocol and the runtime, not the internet: a
+deployed Worker adds the trip to the nearest edge, which is the only term that
+will matter. The useful conclusion is that **the relay design itself costs
+nothing measurable**, so if remote play ever feels bad it will be geography, and
+WebRTC is the answer to geography rather than to anything in this code. Re-run
+the measurement against the deployed Worker before revisiting the decision.
+
 Consequences:
 - **The relay is payload-blind and stores nothing.** Six-character room codes,
   short TTL, lifetime tied to the host, strict server-side message schema, size

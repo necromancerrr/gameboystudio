@@ -46,5 +46,12 @@ next-env.d.ts
 # native runtime harness build output
 /.native-build/
 
+# input and networking harness build output
+/.test-build/
+
+# wrangler's local state for the room relay
+/worker/.wrangler/
+/.wrangler/
+
 # browser verification screenshots (review artifacts)
 /.browser-shots/

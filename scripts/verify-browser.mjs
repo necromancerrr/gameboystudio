@@ -32,6 +32,10 @@ const CHROME_CANDIDATES = [
   '/usr/bin/chromium',
   '/usr/bin/chromium-browser',
   '/usr/bin/google-chrome',
+  // macOS. Without these the script skipped on every developer machine here,
+  // which reads as a pass in the log and is not one.
+  '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
+  '/Applications/Chromium.app/Contents/MacOS/Chromium',
 ].filter(Boolean);
 
 const chrome = CHROME_CANDIDATES.find((candidate) => fs.existsSync(candidate));
@@ -220,9 +224,25 @@ async function movesWhen({ press, read, other, expect, attempts = 4 }) {
 }
 
 let passed = 0;
+let skipped = 0;
 const failures = [];
 
+/**
+ * Substring filter for iterating on one check without waiting out the whole
+ * suite. Never set in CI, and the summary reports what it skipped so a filtered
+ * run cannot be mistaken for a full one.
+ */
+const ONLY = (process.env.GBS_ONLY ?? '')
+  .toLowerCase()
+  .split(',')
+  .map((term) => term.trim())
+  .filter(Boolean);
+
 async function check(name, body) {
+  if (ONLY.length > 0 && !ONLY.some((term) => name.toLowerCase().includes(term))) {
+    skipped += 1;
+    return;
+  }
   try {
     await body();
     console.log(`  ok   ${name}`);
@@ -572,12 +592,205 @@ try {
     await page.shot('ring-out');
   });
 
-  await check('the couch hint tells you how to get a second player in', async () => {
-    const hint = await page.evaluate(
-      `document.querySelector('[data-testid="couch-hint"]')?.textContent ?? ''`,
-    );
-    if (!/two controllers/i.test(hint)) throw new Error(`hint said: ${hint}`);
+  await check('both seats are shown filled when one keyboard covers them', async () => {
+    const seats = await page.evaluate(`(() => {
+      const nodes = [...document.querySelectorAll('[data-testid^="seat-"]')];
+      return nodes.map((node) => ({
+        present: node.dataset.present,
+        text: node.textContent.trim(),
+      }));
+    })()`);
+    if (seats.length !== 2) throw new Error(`saw ${seats.length} seats`);
+    if (!seats.every((seat) => seat.present === 'true')) {
+      throw new Error(`a seat read empty on a keyboard: ${JSON.stringify(seats)}`);
+    }
+    // The panel names devices, never indexes or mappings — D-014 keeps runtime
+    // internals out of player-facing UI and this is the same rule.
+    if (!seats.every((seat) => /Keyboard/.test(seat.text))) {
+      throw new Error(`seats did not name the device: ${JSON.stringify(seats)}`);
+    }
   });
+
+  await check('a lone controller can be moved to the second seat', async () => {
+    await page.goto(`${base}/games/ring-out`);
+    await sleep(2200);
+    await page.evaluate(`window.__padConnect(4, 'Verification Pad C')`);
+    await sleep(600);
+
+    const seatText = () => page.evaluate(`(() => {
+      const node = document.querySelector('[data-testid="seat-1"]');
+      return node ? node.textContent.trim() : '';
+    })()`);
+    if (/Verification Pad C/.test(await seatText())) {
+      throw new Error('the pad started in the second seat, so the swap proves nothing');
+    }
+
+    const swapped = await page.evaluate(`(() => {
+      const button = document.querySelector('[data-testid="swap-players"]');
+      if (!button) return false;
+      button.click();
+      return true;
+    })()`);
+    if (!swapped) throw new Error('no way to switch seats was offered');
+    await sleep(400);
+    if (!/Verification Pad C/.test(await seatText())) {
+      throw new Error(`the pad did not move: ${await seatText()}`);
+    }
+    await page.evaluate(`window.__padDisconnect(4)`);
+  });
+
+  console.log('\nRooms:');
+
+  /**
+   * The claim M4 makes, tested the only way that proves it: the input does not
+   * originate in this browser at all. It is sent from Node, over a real
+   * WebSocket, through the real relay, and has to move pixels on the host's
+   * screen. Nothing here reaches into the page's state.
+   */
+  const RELAY_HTTP = process.env.GBS_RELAY_HTTP ?? 'http://127.0.0.1:8787';
+  const RELAY_WS = process.env.GBS_RELAY_WS ?? 'ws://127.0.0.1:8787';
+  const relayUp = await fetch(`${RELAY_HTTP}/health`)
+    .then((response) => response.ok)
+    .catch(() => false);
+
+  if (!relayUp) {
+    console.log(`  no relay answering on ${RELAY_HTTP} — SKIPPED, which is not a pass.`);
+    console.log('  Start one with: npm run relay:dev');
+  } else {
+    /** Speaks the room protocol from Node, the way a phone would. */
+    const openGuest = async (code) => {
+      const socket = new WebSocket(`${RELAY_WS}/join?code=${code}`);
+      const seat = await new Promise((resolve, reject) => {
+        const timer = setTimeout(() => reject(new Error('the room never gave a seat')), 8000);
+        socket.addEventListener('open', () => {
+          socket.send(JSON.stringify({ t: 'join', v: 1, code }));
+        });
+        socket.addEventListener('error', () => reject(new Error('could not reach the relay')));
+        socket.addEventListener('message', (event) => {
+          const message = JSON.parse(event.data);
+          if (message.t === 'err') {
+            clearTimeout(timer);
+            reject(new Error(`the room refused us: ${message.code}`));
+          }
+          if (message.t === 'msg' && message.ch === 'control' && message.d?.c === 'seat') {
+            clearTimeout(timer);
+            resolve(message.d);
+          }
+        });
+      });
+      return {
+        socket,
+        seat,
+        press: (button, pressed) =>
+          socket.send(JSON.stringify({ t: 'msg', ch: 'input', d: { b: button, p: pressed } })),
+      };
+    };
+
+    const openRoom = async () => {
+      await page.goto(`${base}/games/ring-out`);
+      await sleep(2500);
+      const opened = await page.evaluate(`(() => {
+        const button = document.querySelector('[data-testid="invite-open"]');
+        if (!button) return false;
+        button.click();
+        return true;
+      })()`);
+      if (!opened) {
+        throw new Error(
+          'no Invite button — build with NEXT_PUBLIC_RELAY_URL set for these checks',
+        );
+      }
+      const deadline = Date.now() + 8000;
+      for (;;) {
+        const code = await page.evaluate(
+          `document.querySelector('[data-testid="invite-code"]')?.textContent ?? ''`,
+        );
+        if (/^[A-Z0-9]{6}$/.test(code)) return code;
+        if (Date.now() > deadline) throw new Error('the room never produced a code');
+        await sleep(200);
+      }
+    };
+
+    let guest = null;
+
+    await check('a phone can join a room and take a seat', async () => {
+      const code = await openRoom();
+      guest = await openGuest(code);
+      if (typeof guest.seat.slot !== 'number') throw new Error('no seat number');
+      if (guest.seat.title !== 'Ring Out') {
+        throw new Error(`the phone was told it was playing "${guest.seat.title}"`);
+      }
+      await page.shot('room-invite');
+    });
+
+    await check('a button pressed off-device moves that player on the host screen', async () => {
+      if (!guest) throw new Error('no guest joined');
+      // Player one is green and player two amber, matching the seat badge the
+      // phone shows, so the wrong seat would move the wrong fighter.
+      const mineHex = guest.seat.slot === 0 ? '#9bbc0f' : '#e0a33e';
+      const theirsHex = guest.seat.slot === 0 ? '#e0a33e' : '#9bbc0f';
+      const mine = () => page.evaluate(CENTROID('[data-testid="native-screen"]', mineHex, 40));
+      const theirs = () => page.evaluate(CENTROID('[data-testid="native-screen"]', theirsHex, 40));
+
+      const moved = await movesWhen({
+        press: async () => {
+          guest.press('right', true);
+          await sleep(300);
+          guest.press('right', false);
+          await sleep(150);
+        },
+        read: mine,
+        other: theirs,
+        expect: (before, after) => after.x > before.x + 4,
+      });
+      if (Math.abs(moved.otherAfter.x - moved.otherBefore.x) > 2) {
+        throw new Error('the phone moved the other player too');
+      }
+      await page.shot('room-remote-input');
+    });
+
+    await check('a phone that vanishes gives up its seat', async () => {
+      if (!guest) throw new Error('no guest joined');
+      const seatText = () =>
+        page.evaluate(
+          `document.querySelector('[data-testid="seat-${guest.seat.slot}"]')?.textContent ?? ''`,
+        );
+
+      if (!/Phone/.test(await seatText())) {
+        throw new Error(`the seat never showed the phone: ${await seatText()}`);
+      }
+
+      guest.press('left', true);
+      await sleep(250);
+      // No goodbye — the socket simply dies, the way a locked phone does. That
+      // the held button is also released is asserted in verify:net, where the
+      // router can be observed directly; Ring Out resets rounds on a knockout,
+      // so a stuck direction stops producing visible drift within a second and
+      // a pixel-based check for it cannot fail.
+      guest.socket.close();
+      await sleep(1200);
+
+      if (/Phone/.test(await seatText())) {
+        throw new Error(`the seat still shows the phone: ${await seatText()}`);
+      }
+      guest = null;
+    });
+
+    await check('closing the room frees the seat again', async () => {
+      const closed = await page.evaluate(`(() => {
+        const button = document.querySelector('[data-testid="invite-close"]');
+        if (!button) return false;
+        button.click();
+        return true;
+      })()`);
+      if (!closed) throw new Error('no way to close the room');
+      await sleep(500);
+      const stillOpen = await page.evaluate(
+        `!!document.querySelector('[data-testid="invite-code"]')`,
+      );
+      if (stillOpen) throw new Error('the room code was still on screen after closing');
+    });
+  }
 
   console.log('\nControllers:');
 
@@ -710,6 +923,29 @@ try {
     await page.shot('retro');
   });
 
+  await check('a Game Boy game keeps drawing, not just its first frame', async () => {
+    // Tobu Tobu Girl runs an attract loop on its own, so a screen that never
+    // changes means the emulator stopped, not that nothing was pressed. Without
+    // this, a stalled loop shows up as "input does nothing" and sends the next
+    // person hunting through the input layer — exactly the wrong-layer chase
+    // D-012 was written about.
+    const frame = () => page.evaluate(`(() => {
+      const canvas = document.querySelector('[data-testid="gb-screen"]');
+      const { data } = canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height);
+      let hash = 0;
+      for (let i = 0; i < data.length; i += 41) hash = (hash * 31 + data[i]) | 0;
+      return hash;
+    })()`);
+    const seen = new Set();
+    for (let i = 0; i < 8; i += 1) {
+      seen.add(await frame());
+      await sleep(250);
+    }
+    if (seen.size === 1) {
+      throw new Error(`the screen never changed at all over 2s (hash ${[...seen][0]})`);
+    }
+  });
+
   await check('keyboard input changes what a Game Boy game draws', async () => {
     const snapshot = () => page.evaluate(`(() => {
       const canvas = document.querySelector('[data-testid="gb-screen"]');
@@ -797,7 +1033,68 @@ try {
     await page.shot('handheld-ring-out');
   });
 
-  console.log(`\n${passed} browser checks pass`);
+  await check('an empty seat holds the game instead of running it one-sided', async () => {
+    // Still phone-sized from the check above, so there is no keyboard and no
+    // touch deck: Ring Out has nobody in either seat.
+    await page.evaluate(`document.querySelector('[data-testid="play-gate"]')?.click()`);
+    await sleep(1500);
+
+    const waiting = await page.evaluate(
+      `document.querySelector('[data-testid="waiting-for-players"]')?.textContent ?? ''`,
+    );
+    if (!/waiting for player/i.test(waiting)) {
+      throw new Error(`no waiting state, saw: ${waiting}`);
+    }
+
+    // Saying "waiting" is not the same as actually waiting. Ring Out's ring
+    // shrinks on a timer, so a running loop cannot hold still for a second.
+    const frame = () => page.evaluate(`(() => {
+      const canvas = document.querySelector('[data-testid="native-screen"]');
+      const { data } = canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height);
+      let hash = 0;
+      for (let i = 0; i < data.length; i += 37) hash = (hash * 31 + data[i]) | 0;
+      return hash;
+    })()`);
+    const before = await frame();
+    await sleep(1200);
+    if ((await frame()) !== before) {
+      throw new Error('the game kept running with an empty seat');
+    }
+    await page.shot('waiting-for-players');
+  });
+
+  await check('the same game does run once a seat is filled', async () => {
+    // The falsifying half of the check above: without this, "nothing moved"
+    // could just as easily mean the game never started at all.
+    await page.evaluate(`window.__padConnect(8, 'Verification Pad D')`);
+    await page.evaluate(`window.__padConnect(9, 'Verification Pad E')`);
+    await sleep(1500);
+
+    const stillWaiting = await page.evaluate(
+      `!!document.querySelector('[data-testid="waiting-for-players"]')`,
+    );
+    if (stillWaiting) throw new Error('two pads arrived and it still said it was waiting');
+
+    const frame = () => page.evaluate(`(() => {
+      const canvas = document.querySelector('[data-testid="native-screen"]');
+      const { data } = canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height);
+      let hash = 0;
+      for (let i = 0; i < data.length; i += 37) hash = (hash * 31 + data[i]) | 0;
+      return hash;
+    })()`);
+    const before = await frame();
+    await sleep(1200);
+    if ((await frame()) === before) {
+      throw new Error('the game stayed frozen even with both seats filled');
+    }
+    await page.evaluate(`window.__padDisconnect(8)`);
+    await page.evaluate(`window.__padDisconnect(9)`);
+  });
+
+  console.log(
+    `\n${passed} browser checks pass` +
+      (skipped ? ` — ${skipped} SKIPPED by GBS_ONLY="${process.env.GBS_ONLY}", not a full run` : ''),
+  );
   if (failures.length) {
     console.log('failed:', failures.join(', '));
     process.exitCode = 1;

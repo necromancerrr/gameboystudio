@@ -12,7 +12,7 @@
 
 import { useMemo, useState } from 'react';
 import { GameCard } from '@/components/GameCard';
-import { CONSOLE_LABELS, searchGames, type Game } from '@/catalog';
+import { CONSOLE_LABELS, isMultiplayer, searchGames, type Game } from '@/catalog';
 import type { ConsoleId } from '@/emulation/core/types';
 
 /** 'original' is not a console, but from the shelf it reads as one more source. */
@@ -27,8 +27,10 @@ export function GameLibrary({
 }) {
   const [query, setQuery] = useState('');
   const [console, setConsole] = useState<ConsoleFilter>('all');
+  const [twoPlayer, setTwoPlayer] = useState(false);
 
   const hasOriginals = useMemo(() => games.some((game) => game.console === null), [games]);
+  const hasMultiplayer = useMemo(() => games.some(isMultiplayer), [games]);
 
   const visible = useMemo(() => {
     const byConsole =
@@ -37,8 +39,9 @@ export function GameLibrary({
         : console === 'original'
           ? games.filter((game) => game.console === null)
           : games.filter((game) => game.console === console);
-    return searchGames(byConsole, query);
-  }, [games, console, query]);
+    const byPlayers = twoPlayer ? byConsole.filter(isMultiplayer) : byConsole;
+    return searchGames(byPlayers, query);
+  }, [games, console, twoPlayer, query]);
 
   return (
     <>
@@ -76,12 +79,29 @@ export function GameLibrary({
               {CONSOLE_LABELS[id]}
             </FilterChip>
           ))}
+
+          {/* A different axis from console, so it is separated rather than
+              filed alongside as if it were one more source. */}
+          {hasMultiplayer ? (
+            <>
+              <span aria-hidden="true" className="mx-0.5 my-1 w-px self-stretch bg-hairline" />
+              <FilterChip
+                active={twoPlayer}
+                onClick={() => setTwoPlayer((on) => !on)}
+                testId="filter-two-player"
+              >
+                Two players
+              </FilterChip>
+            </>
+          ) : null}
         </nav>
       </div>
 
       {visible.length === 0 ? (
         <p data-testid="library-empty" className="py-16 text-center text-sm text-muted">
-          Nothing matches “{query}”.
+          {query.trim()
+            ? `Nothing matches “${query}”.`
+            : 'Nothing here matches those filters.'}
         </p>
       ) : (
         <ul
@@ -103,16 +123,19 @@ function FilterChip({
   active,
   onClick,
   children,
+  testId,
 }: {
   active: boolean;
   onClick: () => void;
   children: React.ReactNode;
+  testId?: string;
 }) {
   return (
     <button
       type="button"
       onClick={onClick}
       aria-pressed={active}
+      data-testid={testId}
       className={[
         'rounded-full border px-3 py-1.5 text-xs transition-colors',
         active

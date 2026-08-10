@@ -23,7 +23,7 @@ const MARKERS = {
   drift: 'LOST IN SPACE',
   'ring-out': 'PRESS A TO REMATCH',
   runtime: 'This browser could not open a 2D canvas.',
-  'native player': 'cannot hold two people at once',
+  'native player': 'One screen cannot hold two',
 };
 
 /** A retro page and a native page, to compare what each one pulls in. */

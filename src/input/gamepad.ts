@@ -8,6 +8,7 @@
 
 import { LOGICAL_BUTTONS, type LogicalButton } from '@/emulation/core/types';
 import type { PlayerIndex } from './InputRouter';
+import { PlayerSlots } from './PlayerSlots';
 
 /**
  * Indexes from the W3C "standard gamepad" mapping, which is defined by physical
@@ -57,6 +58,12 @@ export interface GamepadBindingOptions {
    * Above 1, slots are exclusive.
    */
   maxPlayers?: number;
+  /**
+   * Shared slot table. Pass the one the player component owns so pads, phones
+   * and keyboards are assigned by the same rules; omit it and this binding gets
+   * a private table sized by `maxPlayers`.
+   */
+  slots?: PlayerSlots;
   onButton: (player: PlayerIndex, button: LogicalButton, pressed: boolean) => void;
   /** Called with every assigned pad whenever the set changes. */
   onConnectionChange?: (pads: GamepadInfo[]) => void;
@@ -78,62 +85,17 @@ function readPads(): Gamepad[] {
 }
 
 /**
- * Assigns pads to player slots.
- *
- * Deliberately not positional: `gamepads[0] === player 1` breaks the moment a
- * pad sleeps and reconnects at a different browser index. Slots are held, freed
- * on disconnect, and preferred again when the same pad id returns.
+ * Cleans a raw gamepad id into something worth showing a player.
+ * "DualSense Wireless Controller (STANDARD GAMEPAD Vendor: 054c ...)" is not.
  */
-class SlotAssigner {
-  private readonly byGamepadIndex = new Map<number, PlayerIndex>();
-  private readonly lastSlotForId = new Map<string, PlayerIndex>();
-
-  constructor(private readonly maxPlayers: number) {}
-
-  /** Returns the slot for a pad, assigning one if needed, or null if full. */
-  slotFor(pad: Gamepad): PlayerIndex | null {
-    const existing = this.byGamepadIndex.get(pad.index);
-    if (existing !== undefined) return existing;
-
-    // One-player games merge every pad, so any controller works.
-    if (this.maxPlayers <= 1) {
-      this.byGamepadIndex.set(pad.index, 0);
-      return 0;
-    }
-
-    const taken = new Set(this.byGamepadIndex.values());
-    const preferred = this.lastSlotForId.get(pad.id);
-    if (preferred !== undefined && !taken.has(preferred)) {
-      this.byGamepadIndex.set(pad.index, preferred);
-      return preferred;
-    }
-
-    for (let slot = 0; slot < this.maxPlayers; slot += 1) {
-      if (!taken.has(slot)) {
-        this.byGamepadIndex.set(pad.index, slot);
-        this.lastSlotForId.set(pad.id, slot);
-        return slot;
-      }
-    }
-    return null; // every slot is spoken for
-  }
-
-  /** Returns the slots freed by pads that are no longer present. */
-  prune(present: Set<number>): PlayerIndex[] {
-    const freed: PlayerIndex[] = [];
-    for (const [gamepadIndex, slot] of this.byGamepadIndex) {
-      if (!present.has(gamepadIndex)) {
-        this.byGamepadIndex.delete(gamepadIndex);
-        freed.push(slot);
-      }
-    }
-    return freed;
-  }
+export function padLabel(id: string): string {
+  return id.replace(/\s*\([^)]*\)\s*/g, ' ').trim() || 'Controller';
 }
 
 /** Returns an unbind function; callers must invoke it on teardown. */
 export function bindGamepad({
   maxPlayers = 1,
+  slots: providedSlots,
   onButton,
   onConnectionChange,
 }: GamepadBindingOptions): () => void {
@@ -141,7 +103,10 @@ export function bindGamepad({
     return () => {};
   }
 
-  const slots = new SlotAssigner(maxPlayers);
+  // Slot policy lives in PlayerSlots so that pads, phones and keyboards are
+  // assigned by one set of rules. Owning a private copy here is how a remote
+  // player and a local pad would end up both believing they are player one.
+  const slots = providedSlots ?? new PlayerSlots(maxPlayers);
   const held = new Map<PlayerIndex, Set<LogicalButton>>();
   let frame: number | null = null;
   let lastSignature = '';
@@ -164,15 +129,20 @@ export function bindGamepad({
 
   const pollOnce = () => {
     const pads = readPads();
-    const present = new Set(pads.map((pad) => pad.index));
-    for (const freedSlot of slots.prune(present)) releasePlayer(freedSlot);
+    const present = new Set(pads.map((pad) => String(pad.index)));
+    for (const freedSlot of slots.retain('gamepad', present)) releasePlayer(freedSlot);
 
     const assigned: GamepadInfo[] = [];
     // player -> the buttons any of that player's pads is holding this frame
     const desired = new Map<PlayerIndex, Set<LogicalButton>>();
 
     for (const pad of pads) {
-      const player = slots.slotFor(pad);
+      const player = slots.attach({
+        kind: 'gamepad',
+        key: String(pad.index),
+        label: padLabel(pad.id),
+        memo: pad.id,
+      });
       if (player === null) continue;
       assigned.push({
         id: pad.id,
@@ -256,5 +226,8 @@ export function bindGamepad({
     window.removeEventListener('gamepaddisconnected', handleConnection);
     for (const player of held.keys()) releasePlayer(player);
     held.clear();
+    // The slot table can outlive this binding when it is shared, so leaving
+    // pads attached would show phantom players after a remount.
+    slots.retain('gamepad', new Set());
   };
 }

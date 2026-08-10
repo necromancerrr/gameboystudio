@@ -1,0 +1,18 @@
+{
+  "//": "The room relay runs on Cloudflare Workers, not in a browser. It shares only RoomServer and protocol with the app — HostRoom and GuestLink are browser-side and deliberately not reachable from here.",
+  "compilerOptions": {
+    "target": "es2022",
+    "lib": ["es2022"],
+    "module": "es2022",
+    "moduleResolution": "bundler",
+    "types": ["@cloudflare/workers-types"],
+    "strict": true,
+    "skipLibCheck": true,
+    "noEmit": true,
+    "isolatedModules": true,
+    "esModuleInterop": true,
+    "baseUrl": "..",
+    "paths": { "@/*": ["./src/*"] }
+  },
+  "include": ["src/**/*.ts", "../src/net/RoomServer.ts", "../src/net/protocol.ts"]
+}

@@ -12,10 +12,11 @@
  * never downloads either one.
  */
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import type { NativeGameRuntime } from '@/native/NativeGameRuntime';
 import type { LogicalButton } from '@/emulation/core/types';
 import { InputRouter } from '@/input/InputRouter';
+import { PlayerSlots, type SlotState } from '@/input/PlayerSlots';
 import {
   bindKeyboard,
   P1_DUAL_CODE_MAP,
@@ -26,6 +27,8 @@ import {
 import { bindGamepad, type GamepadInfo } from '@/input/gamepad';
 import { TouchControls } from '@/components/TouchControls';
 import { BootOverlay } from '@/components/BootOverlay';
+import { InvitePanel } from '@/components/InvitePanel';
+import { relayConfigured, useHostRoom } from '@/net/useHostRoom';
 import { readSave, writeSave } from '@/emulation/core/saveStorage';
 import { playActivity } from '@/storage/playActivity';
 
@@ -60,6 +63,22 @@ export function NativePlayer({ entry, slug, title, players, supportsTouch }: Nat
 
   const isHandheld = useCoarsePointer();
   const multiplayer = players.max > 1;
+  /**
+   * Only games that genuinely need a second person wait for one. A one-player
+   * game must never gate on presence: on a phone its only input device is the
+   * touch deck, and the deck does not appear until the game has started, so
+   * gating would deadlock a game that has nothing to wait for.
+   */
+  const needsCompany = players.min > 1;
+
+  const [slots] = useState(() => new PlayerSlots(Math.max(players.max, 1)));
+  const slotStates = useSyncExternalStore(
+    useCallback((notify) => slots.subscribe(notify), [slots]),
+    useCallback(() => slots.snapshot(), [slots]),
+    useCallback(() => slots.snapshot(), [slots]),
+  );
+  const presentPlayers = slotStates.filter((slot) => slot.devices.length > 0).length;
+  const roomReady = !needsCompany || presentPlayers >= players.min;
 
   const [status, setStatus] = useState<Status>('loading');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -124,6 +143,7 @@ export function NativePlayer({ entry, slug, title, players, supportsTouch }: Nat
 
     const unbindGamepad = bindGamepad({
       maxPlayers: players.max,
+      slots,
       onButton: (player, button, pressed) => router.set(player, 'gamepad', button, pressed),
       onConnectionChange: (connected) => {
         if (cancelled) return;
@@ -216,7 +236,33 @@ export function NativePlayer({ entry, slug, title, players, supportsTouch }: Nat
       runtimeRef.current = null;
       routerRef.current = null;
     };
-  }, [entry, slug, players.max, multiplayer, supportsTouch]);
+  }, [entry, slug, players.max, multiplayer, supportsTouch, slots]);
+
+  /**
+   * Whether a keyboard counts as a person sitting down.
+   *
+   * The binding is always attached — a Bluetooth keyboard can appear at any
+   * moment and typing should work the instant it does — but on a touch device
+   * nobody is at it, and claiming otherwise would report a phone as a full
+   * two-player couch.
+   */
+  useEffect(() => {
+    if (isHandheld) {
+      slots.detach('keyboard', 'p1');
+      slots.detach('keyboard', 'p2');
+      return;
+    }
+    if (multiplayer) {
+      slots.attach({ kind: 'keyboard', key: 'p1', label: 'Keyboard' }, 0);
+      slots.attach({ kind: 'keyboard', key: 'p2', label: 'Keyboard' }, 1);
+    } else {
+      slots.attach({ kind: 'keyboard', key: 'p1', label: 'Keyboard' }, 0);
+    }
+    return () => {
+      slots.detach('keyboard', 'p1');
+      slots.detach('keyboard', 'p2');
+    };
+  }, [slots, isHandheld, multiplayer]);
 
   // Browsers keep audio suspended until a gesture. resume() is idempotent, so
   // the first click or key press unlocks sound without disturbing the loop.
@@ -230,6 +276,23 @@ export function NativePlayer({ entry, slug, title, players, supportsTouch }: Nat
       window.removeEventListener('keydown', unlock);
     };
   }, [started, paused]);
+
+  /**
+   * Hold the loop while a seat is empty.
+   *
+   * Ring Out used to run regardless, leaving player two as a statue being shoved
+   * around a shrinking platform. Waiting is both kinder and more honest, and it
+   * is player chrome rather than game logic — the `NativeGame` contract knows
+   * nothing about this.
+   */
+  useEffect(() => {
+    if (status !== 'ready' || !started || paused) return;
+    const runtime = runtimeRef.current;
+    if (!runtime) return;
+    if (!roomReady) runtime.pause();
+    // Never resume into a backgrounded tab; that is the other pause's business.
+    else if (!document.hidden) runtime.resume();
+  }, [status, started, paused, roomReady]);
 
   // Stop burning battery in a backgrounded tab. Separate from user pause.
   useEffect(() => {
@@ -292,6 +355,57 @@ export function NativePlayer({ entry, slug, title, players, supportsTouch }: Nat
   const showTouchDeck =
     handheldActive && supportsTouch && (pads.length === 0 || touchForced);
 
+  // The deck is a device like any other, so the panel can say what player one
+  // is actually holding rather than assuming.
+  useEffect(() => {
+    if (!showTouchDeck) {
+      slots.detach('touch', 'deck');
+      return;
+    }
+    slots.attach({ kind: 'touch', key: 'deck', label: 'Touch' }, 0);
+    return () => {
+      slots.detach('touch', 'deck');
+    };
+  }, [slots, showTouchDeck]);
+
+  /**
+   * Swapping is offered only when it is unambiguous: one person is holding one
+   * controller and might have wanted the other seat. With two pads there is
+   * nothing to disambiguate, and with none there is nothing to move.
+   */
+  const claimedSlots = slotStates.filter((slot) => slot.claimed);
+  const canSwap = multiplayer && claimedSlots.length === 1;
+  const handleSwapPlayers = useCallback(() => {
+    routerRef.current?.releaseAll();
+    slots.swap(0, 1);
+  }, [slots]);
+
+  // Remote input is merged exactly like a pad's. The runtime is never told.
+  const handleRemoteInput = useCallback(
+    (player: number, button: LogicalButton, pressed: boolean) => {
+      routerRef.current?.set(player, 'remote', button, pressed);
+    },
+    [],
+  );
+  const handleRemoteRelease = useCallback((player: number) => {
+    routerRef.current?.releaseSource(player, 'remote');
+  }, []);
+
+  const room = useHostRoom({
+    slots,
+    title,
+    onInput: handleRemoteInput,
+    onReleasePlayer: handleRemoteRelease,
+  });
+
+  // A guest whose buttons are going nowhere should be told why rather than
+  // concluding their phone is broken.
+  const broadcastStatus = room.broadcastStatus;
+  useEffect(() => {
+    if (!room.code) return;
+    broadcastStatus(paused, !roomReady);
+  }, [room.code, broadcastStatus, paused, roomReady]);
+
   return (
     <div className={handheldActive ? 'handheld' : 'flex flex-col items-center'}>
       <div
@@ -330,6 +444,18 @@ export function NativePlayer({ entry, slug, title, players, supportsTouch }: Nat
           ) : null}
 
           {status !== 'error' ? <BootOverlay ready={booted} /> : null}
+
+          {status === 'ready' && started && !roomReady ? (
+            <div
+              data-testid="waiting-for-players"
+              className="absolute inset-0 flex flex-col items-center justify-center gap-1 rounded bg-black/70 px-6 text-center backdrop-blur-[2px]"
+            >
+              <p className="text-sm text-foreground">Waiting for player two</p>
+              <p className="max-w-[14rem] text-xs leading-relaxed text-muted">
+                {title} needs someone in the second seat.
+              </p>
+            </div>
+          ) : null}
 
           {status === 'ready' && !started ? (
             <button
@@ -375,24 +501,46 @@ export function NativePlayer({ entry, slug, title, players, supportsTouch }: Nat
           </div>
 
           {multiplayer ? (
-            <p data-testid="couch-hint" className="mt-3 max-w-md text-center text-xs text-muted">
-              {pads.length >= 2
-                ? 'Two controllers ready. Player one is green, player two is amber.'
-                : pads.length === 1
-                  ? 'One controller connected. Player two can join with a second controller, or share the keyboard using W A S D and H.'
-                  : 'Two players. Use two controllers, or share one keyboard: arrows and X for player one, W A S D and H for player two.'}
-            </p>
+            <>
+              <PlayerSeats
+                slots={slotStates}
+                canSwap={canSwap}
+                onSwap={handleSwapPlayers}
+              />
+              <div className="mt-3 flex justify-center">
+                <InvitePanel
+                  available={relayConfigured}
+                  code={room.code}
+                  joinUrl={room.joinUrl}
+                  guests={room.guests}
+                  connecting={room.state === 'connecting'}
+                  onOpen={room.open}
+                  onClose={room.close}
+                />
+              </div>
+            </>
           ) : null}
         </>
       ) : null}
 
-      {/* An honest dead end rather than a broken game: two thumb decks on one
-          phone is not a real control scheme, so the page says so. */}
-      {isHandheld && !supportsTouch && pads.length < 2 ? (
-        <p data-testid="touch-unsupported" className="mt-3 max-w-xs text-center text-xs text-muted">
-          {title} is a two-player game and needs two controllers. A touchscreen
-          cannot hold two people at once.
-        </p>
+      {/* Two thumb decks on one phone is still not a control scheme — but a
+          second phone is. What used to be an honest dead end is now a way in. */}
+      {isHandheld && !supportsTouch && !roomReady ? (
+        <div className="mt-3 flex max-w-xs flex-col items-center gap-3 text-center">
+          <p data-testid="touch-unsupported" className="text-xs text-muted">
+            {title} needs a player in each seat. One screen cannot hold two
+            people — but another phone can be the second controller.
+          </p>
+          <InvitePanel
+            available={relayConfigured}
+            code={room.code}
+            joinUrl={room.joinUrl}
+            guests={room.guests}
+            connecting={room.state === 'connecting'}
+            onOpen={room.open}
+            onClose={room.close}
+          />
+        </div>
       ) : null}
 
       {toast ? (
@@ -402,6 +550,76 @@ export function NativePlayer({ entry, slug, title, players, supportsTouch }: Nat
         >
           {toast}
         </div>
+      ) : null}
+    </div>
+  );
+}
+
+/**
+ * Who is sitting where, and on what.
+ *
+ * The colours match the fighters in Ring Out — player one green, player two
+ * amber — so the panel answers "which one am I" without saying it in words.
+ * This is presence, not diagnostics: it names devices a person recognises
+ * ("DualSense", "Keyboard"), never indexes or mappings. D-014 bars runtime
+ * internals from player-facing UI and the same reasoning applies here.
+ */
+function PlayerSeats({
+  slots,
+  canSwap,
+  onSwap,
+}: {
+  slots: readonly SlotState[];
+  canSwap: boolean;
+  onSwap: () => void;
+}) {
+  return (
+    <div data-testid="player-seats" className="mt-3 flex flex-col items-center gap-2">
+      <ul className="flex flex-wrap items-center justify-center gap-2">
+        {slots.map((slot) => {
+          const present = slot.devices.length > 0;
+          // Several devices can feed one seat; name them all rather than
+          // picking one and being wrong about what someone is holding.
+          const labels = [...new Set(slot.devices.map((device) => device.label))];
+          return (
+            <li
+              key={slot.player}
+              data-testid={`seat-${slot.player}`}
+              data-present={present ? 'true' : 'false'}
+              className={[
+                'flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs transition-colors',
+                present
+                  ? 'border-hairline-strong text-foreground'
+                  : 'border-dashed border-hairline text-faint',
+              ].join(' ')}
+            >
+              <span
+                aria-hidden="true"
+                className={[
+                  'size-2 rounded-full',
+                  present
+                    ? slot.player === 0
+                      ? 'bg-lcd'
+                      : 'bg-amber-400'
+                    : 'bg-transparent ring-1 ring-hairline-strong',
+                ].join(' ')}
+              />
+              <span>P{slot.player + 1}</span>
+              <span className="text-muted">{present ? labels.join(' + ') : 'Empty'}</span>
+            </li>
+          );
+        })}
+      </ul>
+
+      {canSwap ? (
+        <button
+          type="button"
+          onClick={onSwap}
+          data-testid="swap-players"
+          className="rounded-md border border-hairline px-2.5 py-1 text-[0.7rem] text-muted transition-colors hover:border-hairline-strong hover:text-foreground"
+        >
+          Switch seats
+        </button>
       ) : null}
     </div>
   );

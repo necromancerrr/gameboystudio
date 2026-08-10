@@ -163,6 +163,92 @@ body {
    tuned on real devices.
    --------------------------------------------------------------------------- */
 
+/**
+ * The guest controller page.
+ *
+ * Shaped like `.handheld` because it is the same thing minus the screen: the
+ * game is on the host's television, so everything below the thin status strip
+ * is deck. Deliberately not a variant of `.handheld` — that class is built
+ * around holding a game, and inheriting its stage rules to then hide them
+ * would be the more confusing kind of reuse.
+ */
+.join {
+  position: fixed;
+  inset: 0;
+  height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  background: var(--gbs-bg);
+  padding-top: env(safe-area-inset-top);
+  padding-bottom: env(safe-area-inset-bottom);
+  overscroll-behavior: none;
+  touch-action: none;
+  z-index: 50;
+}
+
+.join__header {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.6rem 1rem;
+  border-bottom: 1px solid var(--gbs-border);
+  font-size: 0.7rem;
+}
+
+.join__seat {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 2rem;
+  padding: 0.15rem 0.45rem;
+  border-radius: 999px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  color: #000;
+  background: var(--gbs-lcd);
+}
+/* Player two is amber, matching the fighter on the host's screen. */
+.join__seat[data-seat='1'] {
+  background: #e0a33e;
+}
+
+.join__title {
+  color: var(--gbs-muted);
+  flex: 1 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* A dot, not a word: the connection is only interesting when it is wrong. */
+.join__state {
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 999px;
+  flex: 0 0 auto;
+  background: var(--gbs-lcd);
+  transition: background-color 200ms ease-out;
+}
+.join__state[data-state='connecting'] {
+  background: #e0a33e;
+}
+.join__state[data-state='closed'],
+.join__state[data-state='idle'] {
+  background: var(--gbs-border);
+}
+
+.join__status {
+  padding: 0.5rem 1rem 0;
+  text-align: center;
+  font-size: 0.7rem;
+  color: var(--gbs-faint);
+}
+
+.join__deck {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
 .handheld {
   position: fixed;
   inset: 0;

@@ -221,6 +221,84 @@ it cannot quietly degrade to one player to make a demo work.
 | Guest drops mid-press, leaving a button stuck down | `releaseSource` on the slot, same shape as the pad-disconnect fix in D-010 |
 | Phone sleeps mid-session | Wake lock, and rejoin restores the slot rather than allocating a new one |
 
+## What the stages actually produced
+
+**S1 — Slots and readiness.** `src/input/PlayerSlots.ts` is the single authority
+on who is playing and on what. `gamepad.ts` no longer keeps a private copy of
+slot policy; it asks the shared table, which is what stops a phone and a pad
+both believing they are player one.
+
+The model that survived contact with the code is *not* one device per slot.
+`InputRouter` already merges several sources onto one player and should — a
+person holding a pad can still hit Start on the keyboard. So a slot holds a set
+of devices, split into **claiming** (gamepad, remote: a thing one person is
+holding, takes a slot exclusively) and **shared** (keyboard, touch: not evidence
+of a particular person, never competes).
+
+Readiness holds the loop while a seat is empty, so Ring Out no longer runs
+one-sided with player two as a statue. It is player chrome — the `NativeGame`
+contract is untouched — and it applies only to games whose `players.min > 1`,
+because a one-player game on a phone has no keyboard and its only input device
+is a deck that does not exist until the game starts. Gating those would
+deadlock.
+
+**S2 — Transport seam.** `RemoteTransport` carries opaque string frames and
+knows nothing about buttons. `LoopbackTransport` is a real transport with a real
+asynchronous boundary rather than a mock, so the whole join → input → game path
+is testable with no server running.
+
+**S3 — The relay.** `src/net/RoomServer.ts` holds all the room logic and is
+shared by the Worker and the tests, so what ships is what was exercised.
+`worker/` is the Cloudflare shell: routing, the upgrade, and the sweep alarm.
+
+Hibernation forced one design decision worth recording: an evicted object loses
+its memory while its sockets stay open, so membership is **rebuilt from the
+sockets** rather than persisted. Each socket carries `{id, role, code, joined}`
+in its attachment. The `joined` flag exists because a socket is accepted before
+its owner has said what it wants — without it, a wake would restore a half-open
+socket as an established host and the real host's `host` message would be
+refused as a takeover.
+
+**S4/S5 — Invite and controller.** `useHostRoom` connects nothing until `open()`
+is called, which keeps D-017's promise that single-player pages never touch the
+relay. The guest page reuses `TouchControls`, so a phone gets the deck from the
+post-M3 polish rather than a hurried second-class one.
+
+## Latency
+
+Measured against a local `wrangler dev`, 200 round trips: **round trip mean
+2.1ms, p50 1.7ms, p95 4.0ms** — about 1ms one way. That is protocol and runtime
+only; a deployed Worker adds the trip to the nearest edge. The design itself
+costs nothing measurable, so WebRTC remains deferred and remains an answer to
+geography rather than to anything in this code.
+
+## What is verified, and how
+
+`npm run verify:input` (15 checks) covers slot assignment, reconnection,
+swapping and routing. `npm run verify:net` (20 checks) drives relay, host and
+guest in one process over a real asynchronous transport.
+
+The end-to-end claim is checked in `verify:browser`: the input does not
+originate in the browser at all. It is sent from Node, over a real WebSocket,
+through the real relay, and has to move the right fighter on the host's screen
+while leaving the other one still.
+
+Per D-012 each check was run against a deliberately broken build. Two findings
+worth keeping:
+
+- Routing remote input to the wrong seat, and letting a departing guest keep its
+  seat, both fail their checks as they should.
+- A pixel-based check that a phone dying mid-press leaves no button held **could
+  not fail**, because Ring Out resets the round on a knockout and a stuck
+  direction stops producing visible drift within a second. It was replaced with
+  a seat assertion that does fail, and the release itself is asserted in
+  `verify:net`, where the router can be observed directly. A check that cannot
+  fail is worse than no check.
+
+A third finding is about the harness rather than the product: a break that does
+not compile makes the suite crash before running, which looks identical to
+"nothing failed" if only failures are grepped. Read the summary line.
+
 ## Definition of done
 
 1. Two people, two devices, one screen, playing Ring Out.
@@ -231,3 +309,34 @@ it cannot quietly degrade to one player to make a demo work.
 5. Single-player pages make no network requests to the relay.
 6. `npm run verify` passes, including a new networked check that fails when
    deliberately broken.
+
+## Running it
+
+The relay is a separate deploy target; the site stays static.
+
+```
+npm run relay:dev        # a local Worker on :8787, Durable Objects and all
+npm run measure:latency  # 200 round trips through it
+npm run relay:deploy     # needs a Cloudflare account
+```
+
+The browser build reads `NEXT_PUBLIC_RELAY_URL` at build time. Unset, the Invite
+affordance does not render at all and every page behaves exactly as it did
+before M4 — which is the honest behaviour for a build with no relay behind it,
+rather than a button that fails when pressed.
+
+```
+NEXT_PUBLIC_RELAY_URL=ws://127.0.0.1:8787 npm run build
+```
+
+`verify:browser` skips the room checks loudly when no relay answers, in the same
+style as its existing "SKIPPED — this is not a pass".
+
+## Open before this ships
+
+- **Deploy the Worker** and set `ALLOWED_ORIGINS`. Empty means any origin, which
+  is only correct for local development.
+- **Re-measure latency** against the deployed Worker from a phone on a home
+  network. That is the number the WebRTC decision actually depends on.
+- **Try it on real hardware.** Everything here is verified headlessly and in
+  Chromium; no phone has yet scanned the QR code.

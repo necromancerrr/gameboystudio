@@ -1,0 +1,16 @@
+{
+  "//": "Used by scripts/verify-input.mjs and scripts/verify-net.mjs, to emit the input and networking layers as CommonJS that Node can require. The app's real typecheck is still `npm run build`.",
+  "compilerOptions": {
+    "target": "es2022",
+    "lib": ["es2022", "dom"],
+    "module": "commonjs",
+    "moduleResolution": "node",
+    "strict": true,
+    "skipLibCheck": true,
+    "baseUrl": "..",
+    "paths": { "@/*": ["./src/*"] },
+    "rootDir": "../src",
+    "outDir": "../.test-build"
+  },
+  "include": ["../src/input/**/*.ts", "../src/net/**/*.ts", "../src/emulation/core/types.ts"]
+}
