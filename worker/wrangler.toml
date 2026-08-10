@@ -12,7 +12,10 @@ class_name = "RoomDurableObject"
 
 [[migrations]]
 tag = "v1"
-new_classes = ["RoomDurableObject"]
+# SQLite-backed rather than the older key-value storage: it is what the free
+# plan allows, and it is the current default for new Durable Objects. Nothing
+# here depends on the difference — a room's only storage is its alarm.
+new_sqlite_classes = ["RoomDurableObject"]
 
 [vars]
 # Comma-separated exact origins allowed to open or join a room.
