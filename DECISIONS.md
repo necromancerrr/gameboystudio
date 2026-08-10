@@ -575,6 +575,149 @@ deliberately broken build: removing the delta clamp, the pressed-edge clear,
 the reset save carry, the player clamp, the slot assignment, or the dynamic
 import each breaks the check that covers it.
 
+## D-016: Multiplayer Is An Input-Layer Concern
+
+Status: Accepted 2026-08-10 — M4 direction
+
+Decision:
+The first networked multiplayer layer transmits **player input**, not frames and
+not game state. A second device sends button edges into the host's
+`InputRouter`; the host runs the only simulation and owns the only screen.
+
+M4 is the first networked layer, not the final multiplayer system:
+**Rooms + Phone Controllers + Network Foundation.**
+
+Context:
+M3 left the whole stack player-indexed — the router, the slot assigner, the
+per-player input state and `NativeGameRuntime.setButton` all take a player index
+— and Ring Out is a real two-player game. What is missing is not a concept of a
+player; it is any path across a device boundary.
+
+Meanwhile Ring Out is an honest dead end on a phone, because two thumb decks on
+one screen is not a control scheme (D-015). That refusal is correct and it is
+also the clearest thing the first networked layer can delete.
+
+Options considered:
+
+1. **Input transport — CHOSEN.** Button edges cross the wire; the host
+   simulates and renders. Costs zero lines inside any game, any runtime, or
+   `BinjgbAdapter`, because it lives below all of them. Works for retro and
+   native alike for the same reason. Ceiling: one shared screen.
+
+2. **Frame transport.** `canvas.captureStream()` to a WebRTC video track, input
+   returning. Also needs no game changes, and unlocks different-places play. But
+   it stacks encode + network + decode into a realistic 80–150ms round trip, and
+   puts hard-edged 320×288 pixel art through chroma subsampling — degrading
+   precisely what D-009 is about. Pause, reset and fullscreen all acquire remote
+   semantics that have to be designed.
+
+3. **State transport.** Both ends simulate: lockstep, or host-authoritative
+   snapshots. Lockstep needs fixed-timestep determinism, but `GameLoop` is
+   variable-dt and both Originals use float physics, so this is a rewrite of the
+   runtime and both games. Snapshots need a new per-frame contract method, which
+   taxes every game the platform will ever host. Retro can never participate in
+   either.
+
+Reason:
+Option 1 is the only one that is free at the layer that matters. It is also the
+format PLATFORM_DIRECTION already defended by name when it rejected an earlier
+draft for banning "one player holds a pad, three others use phones."
+
+Decisively: options 2 and 3 need everything option 1 needs — rooms, codes,
+signaling, membership, disconnect handling, releasing held buttons across a
+network partition — and none of that is cheaper to learn while also carrying a
+video pipeline or a determinism rewrite. Option 1 is the cheapest way to find
+out what networked play actually costs.
+
+Consequences:
+- **The ceiling is one shared screen.** This is not "play with a friend in
+  another city", and the plan says so rather than implying otherwise. Choosing
+  between options 2 and 3 happens after M4 ships, with measured latency in hand.
+- `BinjgbAdapter` is not modified, for the same reason as M3.
+- The `NativeGame` contract is not modified. Readiness and "waiting for player
+  two" are player chrome with the runtime held paused, not game logic.
+- A remote phone should be able to drive a **retro** game, since the network
+  input layer sits below both runtimes. M4 verifies this as proof that the
+  layering is real. It is a test, not a product surface: Game Boy is a
+  one-player console and retro multiplayer is not in scope.
+- Transport-agnostic is necessary but not sufficient. A room whose protocol only
+  understands button edges boxes out options 2 and 3 even behind a swappable
+  transport. The room is therefore defined as a session with typed channels —
+  `input` implemented, `frames` and `state` reserved by name in the protocol
+  version and rejected by the server. Reserving a name is not a stub; it makes
+  the later addition additive rather than a redesign.
+- `RemoteTransport` carries opaque framed messages and knows nothing about
+  buttons, so WebSockets can be replaced by WebRTC DataChannels without the room
+  protocol noticing.
+- The invite flow (QR, short code, link) is the primary join model. Pad-join is
+  the local fallback that reuses the same slot machinery.
+- Slots stop being implicit: a lone pad may take either slot instead of always
+  slot 0, and touch is no longer pinned to player 0.
+
+## D-017: An Ephemeral Relay, And Nothing More
+
+Status: Accepted 2026-08-10 — the project's first backend component
+
+Decision:
+Run a minimal room relay on Cloudflare Workers + Durable Objects with WebSocket
+Hibernation: one Durable Object per room, ephemeral, no database, no accounts,
+no stored gameplay.
+
+Context:
+PLATFORM_DIRECTION lists "netcode, rooms, presence" under *deliberately
+postponed*, and its sixth proposed decision says to stay static and local-first
+"until continuity or multiplayer demands otherwise." D-016 is that clause
+firing. Recording it explicitly matters more than usual, because this is the
+first server-side component in a project whose whole architecture has so far
+been a static site with three dependencies.
+
+Options considered:
+
+1. **Cloudflare Workers + Durable Objects — CHOSEN.** One room maps exactly onto
+   one object, so room lifetime is object lifetime and there is no room table to
+   maintain. WebSocket Hibernation means an idle room costs nothing. Stays one
+   small file.
+2. **A small self-hosted Node or Bun WebSocket service.** Fewer new concepts, but
+   we now operate a always-on process, and room state becomes something to
+   manage rather than something the platform models for us.
+3. **A managed realtime provider (Ably, Pusher, PartyKit).** Least code, but a
+   paid dependency and a vendor in the gameplay path, in a project that has
+   deliberately kept its dependency count at three.
+4. **No server: manual WebRTC offer/answer exchange.** Requires copy-pasting SDP
+   blobs between devices, which violates the Instant Contract outright.
+
+Reason:
+Signaling and relay are unavoidable once play crosses a device boundary, and
+option 4 is the only serverless answer — it fails the one contract that is
+binding. Among the rest, Durable Objects are the only option where "a room" is a
+primitive the platform already has, which is what keeps the implementation
+small enough to stay honest.
+
+Transport: **relay first, WebRTC deferred.** Direct peer-to-peer on a LAN would
+be roughly 2–5ms against 20–30ms through an edge relay. That is better, and it
+costs ICE, candidate gathering, a connection state machine, and a fallback path
+we would have to build regardless. For Ring Out's shoving physics the difference
+is not the product. Latency is measured against the real relay before any UI is
+built on it, and WebRTC is added only if the numbers justify it.
+
+Consequences:
+- **The relay is payload-blind and stores nothing.** Six-character room codes,
+  short TTL, lifetime tied to the host, strict server-side message schema, size
+  and rate limits. It cannot be used as a general-purpose message relay, and it
+  cannot grow into a social backend without a new decision.
+- **Rooms are created only when a player asks to invite someone.** Single-player
+  pages never contact the relay, so the static, local-first behaviour of every
+  existing page is unchanged.
+- A room code is a capability: whoever holds it can press buttons in that
+  session. Six characters plus a short TTL plus host-bound lifetime is the
+  entire security model, which is proportionate to the stake — there is no
+  account and no persistent state to reach.
+- Deployment gains a second target. The Next.js site stays static; the Worker
+  ships separately.
+- This does **not** un-postpone accounts, friends, lobbies, matchmaking,
+  presence beyond one room, or cloud saves. Those remain postponed, and the
+  existence of a Worker is not an argument for any of them.
+
 ## Template For Future Decisions
 
 ### D-XXX: Decision Name

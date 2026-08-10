@@ -249,6 +249,13 @@ Accounts and auth · any backend or database · netcode, rooms, presence · the
 creator editor · AI generation · monetization · moderation tooling · ratings and
 comments · achievements · cloud saves.
 
+**Amended 2026-08-10 by D-016 and D-017.** Rooms and input netcode are no longer
+postponed — M4 implements them, which is proposal 6 above ("stay static and
+local-first until continuity or multiplayer demands otherwise") firing as
+written. The relay is ephemeral and payload-blind: no database, no accounts, no
+stored gameplay. Everything else on this list stays postponed, and the existence
+of that relay is not an argument for any of it.
+
 Additional consoles are **not** on this list. They are a content decision on
 their own track, gated by legal supply.
 
