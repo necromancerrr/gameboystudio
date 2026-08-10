@@ -102,6 +102,39 @@ body {
   image-rendering: pixelated;
 }
 
+/* Checkpoint Boot. Starts hidden so a fast start never flashes it, fades in
+   once revealed, and crossfades out the moment the game is ready. */
+.boot-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 0.25rem;
+  overflow: hidden;
+  background: #000;
+  opacity: 0;
+  transition: opacity 260ms ease;
+}
+
+.boot-overlay--in {
+  opacity: 1;
+}
+
+/* Ready wins: this runs even mid-animation. */
+.boot-overlay--out {
+  opacity: 0;
+}
+
+/* `contain`, not `cover`: the animation is 16:9 and the play area is 10:9, and
+   cropping a brand mark to fill the box is worse than letterboxing it. */
+.boot-overlay__video {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  pointer-events: none;
+}
+
 /* Boot indicator. Games hold a blank screen for seconds while starting, so the
    player needs to show something is happening without naming the machinery. */
 .loading-dots {
