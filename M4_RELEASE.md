@@ -7,10 +7,17 @@ Two of these steps need a Cloudflare account, so they are yours to run.
 
 ---
 
-## 1. Deploy the relay
+## 1. Deploy the relay — DONE
+
+Deployed 2026-08-10 to:
+
+```
+https://gameboystudio-rooms.yejigu.workers.dev
+```
+
+To redeploy after a change:
 
 ```bash
-npx wrangler login
 npm run relay:deploy
 ```
 
@@ -29,10 +36,10 @@ This is the whole security model, so check it against the running thing rather
 than the config file:
 
 ```bash
-npm run verify:relay -- https://gameboystudio-rooms.<your-subdomain>.workers.dev
+npm run verify:relay -- https://gameboystudio-rooms.yejigu.workers.dev
 ```
 
-Expected — and confirmed against a local Worker carrying the production value:
+Confirmed against the deployed Worker, stable across four consecutive runs:
 
 ```
   ok   the production site                        101 (wanted 101)
@@ -44,10 +51,14 @@ Expected — and confirmed against a local Worker carrying the production value:
 If everything returns 101, the allowlist did not apply and the relay is open to
 any page on the internet. Do not continue.
 
+**After deploying a new Durable Object class**, the allowed origin can return 404
+for about a minute while the class propagates, with the rejections already
+correct. That is not a config error — wait and re-run before believing it.
+
 ### Measure real latency
 
 ```bash
-npm run measure:latency -- wss://gameboystudio-rooms.<your-subdomain>.workers.dev
+npm run measure:latency -- wss://gameboystudio-rooms.yejigu.workers.dev
 ```
 
 This sends no `Origin`, so it is refused by the production allowlist. To get a
@@ -58,13 +69,13 @@ WebRTC decision depends on.
 
 ---
 
-## 2. Point the site at it
+## 2. Point the site at it — YOURS TO DO
 
 In the Vercel project (`gameboy`), add an environment variable:
 
 | Name | Value |
 | --- | --- |
-| `NEXT_PUBLIC_RELAY_URL` | `wss://gameboystudio-rooms.<your-subdomain>.workers.dev` |
+| `NEXT_PUBLIC_RELAY_URL` | `wss://gameboystudio-rooms.yejigu.workers.dev` |
 
 **`wss://`, not `ws://`.** The site is HTTPS, and a browser blocks an insecure
 WebSocket from a secure page. The only symptom would be an Invite button that
@@ -86,6 +97,11 @@ You need a laptop and one physical phone, **not** on the same Wi-Fi necessarily
 — the relay is on the internet, so this works either way.
 
 ### Setup
+
+This test needs the deployed relay, so it only works once PR #3 is merged and
+the Vercel variable above is set. Until then the Invite affordance does not
+render on production at all — that is the intended behaviour for a build with no
+relay behind it, not a bug.
 
 1. On the laptop, open `https://gameboy-jet.vercel.app/games/ring-out`.
 2. Wait for the game to appear. Below the screen you should see two seats:
