@@ -335,8 +335,13 @@ body {
 .touch-dpad__pad {
   position: absolute;
   border-radius: 0.4rem;
-  transition: background-color 60ms linear;
+  /* Release may ease; press must not. A fade-in here made the D-pad read as
+     late even though the input had already been dispatched. */
+  transition: background-color 90ms ease-out;
   background: transparent;
+}
+.touch-dpad__pad[data-down='true'] {
+  transition: none;
 }
 .touch-dpad__pad--up    { left: 33.3%; right: 33.3%; top: 0; height: 33.3%; }
 .touch-dpad__pad--down  { left: 33.3%; right: 33.3%; bottom: 0; height: 33.3%; }
@@ -377,7 +382,8 @@ body {
   letter-spacing: 0.02em;
 }
 
-/* A above and right of B — matches the thumb roll and existing muscle memory. */
+/* A above and right of B — the relative arrangement is muscle memory and is
+   preserved now that the cluster sits on the left of the deck. */
 .touch-btn--a { transform: translateY(-16%); }
 .touch-btn--b { transform: translateY(16%); margin-right: 0.75rem; }
 

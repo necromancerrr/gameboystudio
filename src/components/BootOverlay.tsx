@@ -124,6 +124,9 @@ export function BootOverlay({ ready }: { ready: boolean }) {
           src={BOOT_SRC}
           muted={!withSound}
           autoPlay
+          // The animation is shorter than a retro boot, so it loops rather than
+          // freezing on its last frame. Readiness still cuts it off mid-loop.
+          loop
           playsInline
           preload="auto"
           // Decorative: the player loses nothing by not seeing it.
