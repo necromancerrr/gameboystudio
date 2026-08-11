@@ -44,6 +44,11 @@ const VERSION = flag('version', '1.0.0');
  */
 const LABEL = flag('label', '');
 const ORIGIN = flag('origin', 'http://127.0.0.1:8788');
+/** Comma-separated slugs to build and publish. Defaults to all of them. */
+const ONLY = flag('only', '')
+  .split(',')
+  .map((value) => value.trim())
+  .filter(Boolean);
 
 const GAMES = [
   {
@@ -105,7 +110,10 @@ fs.mkdirSync(OUT_ROOT, { recursive: true });
 
 const manifestGames = [];
 
-for (const game of GAMES) {
+const selected = ONLY.length > 0 ? GAMES.filter((game) => ONLY.includes(game.slug)) : GAMES;
+if (selected.length === 0) throw new Error(`--only matched nothing: ${ONLY.join(', ')}`);
+
+for (const game of selected) {
   const outDir = `${OUT_ROOT}/${game.slug}/${VERSION}`;
   fs.rmSync(outDir, { recursive: true, force: true });
   fs.mkdirSync(outDir, { recursive: true });

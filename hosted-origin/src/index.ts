@@ -45,7 +45,12 @@ export default {
     if (url.pathname === '/manifest.json') {
       headers.set('cache-control', REVALIDATE);
       headers.set('content-type', 'application/json; charset=utf-8');
-    } else if (url.pathname.startsWith('/games/')) {
+    } else if (url.pathname.startsWith('/games/') && response.ok) {
+      // Only a file that exists may be cached for a year. Marking a 404
+      // immutable would pin "this game is missing" into every browser that
+      // asked early, and publishing the artifact afterwards would not fix
+      // them — the one caching mistake here that cannot be undone by
+      // repointing the manifest.
       headers.set('cache-control', IMMUTABLE);
     } else {
       headers.set('cache-control', REVALIDATE);
