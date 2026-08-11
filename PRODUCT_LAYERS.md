@@ -127,6 +127,23 @@ Validation question:
 
 **Can another person make this experience meaningfully more fun?**
 
+## Layer 5.5 — Hosted Games
+
+Amended 2026-08-10 by D-018.
+
+Before creators can publish, the platform has to be able to run a game it did
+not compile. Today Game Boy titles are already data — a ROM is an asset,
+interpreted at runtime — while native games must be compiled into the site, so
+the catalog cannot grow without shipping the application.
+
+This is not a layer of its own so much as the floor under the next two. Creator
+tools publish something and AI generates something; both need somewhere to put
+it that is not our source tree.
+
+Validation question:
+
+**Can a game change without rebuilding the platform?**
+
 ## Layer 6 — Creator Platform
 
 Goal:
