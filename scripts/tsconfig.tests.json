@@ -12,5 +12,5 @@
     "rootDir": "../src",
     "outDir": "../.test-build"
   },
-  "include": ["../src/input/**/*.ts", "../src/net/**/*.ts", "../src/hosted/manifest.ts", "../src/hosted/hostedConfig.ts", "../src/catalog/types.ts", "../src/emulation/core/types.ts"]
+  "include": ["../src/input/**/*.ts", "../src/net/**/*.ts", "../src/hosted/**/*.ts", "../src/catalog/types.ts", "../src/emulation/core/types.ts"]
 }
