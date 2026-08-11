@@ -1443,7 +1443,12 @@ try {
     const note = await page.evaluate(
       `document.querySelector('[data-testid="touch-unsupported"]')?.textContent ?? ''`,
     );
-    if (!/two controllers/i.test(note)) throw new Error(`no honest note, saw: ${note}`);
+    // The copy changed when phone controllers made this a way in rather than a
+    // dead end; the assertion is that the page still explains itself, not that
+    // it uses particular words.
+    if (!/second controller|two controllers/i.test(note)) {
+      throw new Error(`no honest note, saw: ${note}`);
+    }
     await page.shot('handheld-ring-out');
   });
 
