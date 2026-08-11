@@ -338,6 +338,27 @@ every press of Restart.
 we wrote" until hosted games arrived — those have no console either. It now
 tests `runtime === 'native'`.
 
+**The harness had been measuring a backgrounded page.** `document.hidden` was
+true for the whole run on this machine, so `requestAnimationFrame` was throttled
+to nothing and every check that watches something move was failing for a reason
+unrelated to the code. Bringing the page to front on navigation fixed a Drift
+check that had been written off as flaky — it was not flaky, it was measuring a
+page that could not render.
+
+This is worth recording because of what it implies about earlier conclusions: a
+check that fails on a page which cannot animate proves nothing either way. The
+one retro failure that **survives** the fix — `keyboard input changes what a
+Game Boy game draws` — is therefore genuinely pre-existing, is present on `main`,
+and is untouched by M5.
+
+**A protocol race that only appeared in sequence.** The hosted checks passed
+alone and failed after the rest of the suite. The frame's `src` is set during
+render, so the document can finish loading before the host attaches its message
+listener, and the guest announced itself exactly once — so the hello was lost
+and the game waited forever, canvas already created. It looked like a game that
+started and ignores input. The SDK now keeps announcing until answered, because
+the race can fall either way and only one side can be made not to care.
+
 **Three checks had to be rewritten because they could not fail.**
 
 A "no input means no save" control was invalid for Drift: a core can sit on the
