@@ -59,8 +59,20 @@ await check('the manifest is JSON and readable cross-origin', async () => {
   }
 });
 
+/** Taken from the manifest, so the check follows whatever is published. */
+const published = await fetch(`${TARGET}/manifest.json`)
+  .then((response) => response.json())
+  .then((body) => body.games?.[0]?.frameUrl ?? null)
+  .catch(() => null);
+
 await check('a versioned artifact is immutable', async () => {
-  const response = await fetch(`${TARGET}/games/demo/1.0.0/frame.html`);
+  if (!published) throw new Error('the manifest lists no games to check');
+  // The version is in the path, which is what lets this be cached for a year
+  // and what makes rollback a matter of repointing the manifest.
+  if (!/\/\d+\.\d+\.\d+\//.test(published)) {
+    throw new Error(`the frame URL carries no version: ${published}`);
+  }
+  const response = await fetch(published);
   if (!response.ok) throw new Error(`artifact returned ${response.status}`);
   const cache = response.headers.get('cache-control') ?? '';
   if (!/immutable/.test(cache)) throw new Error(`artifact cache-control was "${cache}"`);
@@ -68,12 +80,11 @@ await check('a versioned artifact is immutable', async () => {
 });
 
 await check('an exact path is served, not redirected', async () => {
+  if (!published) throw new Error('the manifest lists no games to check');
   // The default asset behaviour rewrites `/x/frame.html` to `/x/frame` with a
   // 307. The manifest points at exact versioned URLs, so that would break them.
-  const response = await fetch(`${TARGET}/games/demo/1.0.0/frame.html`, { redirect: 'manual' });
-  if (response.status !== 200) {
-    throw new Error(`expected 200, got ${response.status}`);
-  }
+  const response = await fetch(published, { redirect: 'manual' });
+  if (response.status !== 200) throw new Error(`expected 200, got ${response.status}`);
 });
 
 await check('the origin is read only', async () => {

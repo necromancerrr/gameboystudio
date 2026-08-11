@@ -27,10 +27,22 @@ export interface HostedInput {
   pressed(player: number, button: LogicalButton): boolean;
 }
 
+export interface HostedGameContext {
+  players: number;
+  canvas: HTMLCanvasElement;
+  /**
+   * Report that persistent state changed. The host decides when to actually
+   * serialize and where the bytes go — the same division the native contract
+   * uses, so a game written for one reads the same as a game written for the
+   * other.
+   */
+  saveDirty(): void;
+}
+
 export interface HostedGameDefinition {
   readonly width: number;
   readonly height: number;
-  init(context: { players: number; canvas: HTMLCanvasElement }): void | Promise<void>;
+  init(context: HostedGameContext): void | Promise<void>;
   update(dt: number, input: HostedInput): void;
   render(g: CanvasRenderingContext2D): void;
   /** Opt into saves. A game without these simply has no save. */
@@ -104,16 +116,23 @@ export function runHostedGame(game: HostedGameDefinition): void {
   document.body.style.cssText = 'margin:0;background:#000;overflow:hidden';
   document.body.appendChild(canvas);
 
-  const context = canvas.getContext('2d');
+  const painter = canvas.getContext('2d');
   const input = new InputState();
 
   let running = false;
   let loaded = false;
+  let players = 1;
   let last = 0;
   let handle: number | null = null;
   let painted = false;
 
   const send = (message: unknown) => window.parent.postMessage(message, '*');
+
+  const context = (): HostedGameContext => ({
+    players,
+    canvas,
+    saveDirty: () => send({ t: 'saveDirty' }),
+  });
 
   const fail = (error: unknown) => {
     running = false;
@@ -123,8 +142,8 @@ export function runHostedGame(game: HostedGameDefinition): void {
   };
 
   const draw = () => {
-    if (!context) return;
-    game.render(context);
+    if (!painter) return;
+    game.render(painter);
     if (!painted) {
       painted = true;
       send({ t: 'painted' });
@@ -168,7 +187,8 @@ export function runHostedGame(game: HostedGameDefinition): void {
     switch (message.t) {
       case 'load':
         try {
-          await game.init({ players: message.players, canvas });
+          players = message.players;
+          await game.init(context());
           loaded = true;
           draw(); // a paused-at-start player sees the game, not a black box
           send({ t: 'ready' });
@@ -187,7 +207,10 @@ export function runHostedGame(game: HostedGameDefinition): void {
         try {
           const wasRunning = running;
           stopLoop();
-          await game.init({ players: 1, canvas });
+          // The player count comes from the session, not from a guess. Passing
+          // 1 here quietly turned a two-player game into a one-player one on
+          // every press of Restart.
+          await game.init(context());
           draw();
           if (wasRunning) startLoop();
         } catch (error) {

@@ -49,6 +49,13 @@ next-env.d.ts
 # input and networking harness build output
 /.test-build/
 
+# Hosted game artifacts and the manifest are build output, produced by
+# `npm run hosted:build`. Committing them would also mean committing a manifest
+# pointing at whatever origin it was last built for, which is how a localhost
+# URL ends up in production.
+/hosted-origin/public/games/
+/hosted-origin/public/manifest.json
+
 # wrangler's local state for the room relay
 /worker/.wrangler/
 /hosted-origin/.wrangler/

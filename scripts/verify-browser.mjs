@@ -68,6 +68,8 @@ class Session {
     this.nextId = 1;
     this.pending = new Map();
     this.events = [];
+    /** Sessions attached to out-of-process frames, newest last. */
+    this.frameSessions = [];
     socket.addEventListener('message', (message) => {
       const data = JSON.parse(message.data);
       if (data.id && this.pending.has(data.id)) {
@@ -77,15 +79,23 @@ class Session {
         else resolve(data.result);
       } else if (data.method) {
         this.events.push(data.method);
+        // A sandboxed opaque-origin frame is its own process, so it never
+        // appears in the parent's frame tree. It arrives here instead.
+        if (data.method === 'Target.attachedToTarget' && data.params?.targetInfo?.type === 'iframe') {
+          this.frameSessions.push(data.params.sessionId);
+        }
+        if (data.method === 'Target.detachedFromTarget') {
+          this.frameSessions = this.frameSessions.filter((id) => id !== data.params?.sessionId);
+        }
       }
     });
   }
 
-  send(method, params = {}) {
+  send(method, params = {}, sessionId) {
     const id = this.nextId++;
     return new Promise((resolve, reject) => {
       this.pending.set(id, { resolve, reject });
-      this.socket.send(JSON.stringify({ id, method, params }));
+      this.socket.send(JSON.stringify({ id, method, params, ...(sessionId ? { sessionId } : {}) }));
     });
   }
 
@@ -102,6 +112,10 @@ class Session {
   }
 
   async goto(url) {
+    // Frame sessions belong to the document being left. Keeping them would let
+    // a later check read a dead frame's canvas and see a game that never moves,
+    // which looks exactly like input not working.
+    this.frameSessions = [];
     await this.send('Page.navigate', { url });
     // The pages are static; a short settle beats parsing lifecycle events.
     await sleep(900);
@@ -122,6 +136,28 @@ class Session {
     await this.key('rawKeyDown', descriptor);
     await sleep(ms);
     await this.key('keyUp', descriptor);
+  }
+
+  /**
+   * Evaluates inside a child frame.
+   *
+   * The page cannot read a sandboxed frame's DOM — that is the isolation being
+   * tested elsewhere in this file — so the harness borrows DevTools privileges
+   * instead, via an isolated world. This does not weaken the boundary: the
+   * claim is about what a *page* can reach, and a debugger is not a page.
+   */
+  async frameEvaluate(expression) {
+    const sessionId = this.frameSessions[this.frameSessions.length - 1];
+    if (!sessionId) throw new Error('no sandboxed frame is attached');
+    const result = await this.send(
+      'Runtime.evaluate',
+      { expression, awaitPromise: true, returnByValue: true },
+      sessionId,
+    );
+    if (result.exceptionDetails) {
+      throw new Error(result.exceptionDetails.exception?.description ?? 'frame evaluate failed');
+    }
+    return result.result.value;
   }
 
   async shot(name) {
@@ -323,6 +359,14 @@ try {
   const page = new Session(socket);
   await page.send('Page.enable');
   await page.send('Runtime.enable');
+  // Sandboxed frames run out-of-process, so reaching them needs an attached
+  // session rather than the parent's frame tree. Flattened, so their messages
+  // arrive on this same socket tagged with a sessionId.
+  await page.send('Target.setAutoAttach', {
+    autoAttach: true,
+    waitForDebuggerOnStart: false,
+    flatten: true,
+  });
 
   /**
    * A controller the test can drive. Headless Chromium exposes no real pads,
@@ -366,7 +410,9 @@ try {
     const tiles = await page.evaluate(
       `[...document.querySelectorAll('[data-testid="library-grid"] li h3')].map((h) => h.textContent)`,
     );
-    if (tiles.length !== 22) throw new Error(`expected 22 tiles, saw ${tiles.length}`);
+    // At least, not exactly: hosted games are fetched at runtime and join the
+    // same grid, so the compiled catalog is a floor rather than the total.
+    if (tiles.length < 22) throw new Error(`expected at least 22 tiles, saw ${tiles.length}`);
     if (!tiles.includes('Drift') || !tiles.includes('Ring Out')) {
       throw new Error('Originals missing from the grid');
     }
@@ -381,7 +427,16 @@ try {
     const tiles = await page.evaluate(
       `[...document.querySelectorAll('[data-testid="library-grid"] li h3')].map((h) => h.textContent)`,
     );
+    // Exactly ours, and nothing else. Hosted games also have no console, so
+    // this would quietly include them if "Original" were defined that way.
     if (tiles.join('|') !== 'Drift|Ring Out') throw new Error(`filter showed ${tiles.join(', ')}`);
+  });
+
+  await check('a hosted game is not filed as one of our Originals', async () => {
+    const tiles = await page.evaluate(
+      `[...document.querySelectorAll('[data-testid="library-grid"] li h3')].map((h) => h.textContent).join('|')`,
+    );
+    if (/hosted/i.test(tiles)) throw new Error(`the Originals filter showed ${tiles}`);
   });
 
   await check('search still finds a retro game', async () => {
@@ -647,6 +702,9 @@ try {
    * WebSocket, through the real relay, and has to move pixels on the host's
    * screen. Nothing here reaches into the page's state.
    */
+  /** Assigned by the Rooms section; the hosted checks reuse it. */
+  let openGuest = null;
+
   const RELAY_HTTP = process.env.GBS_RELAY_HTTP ?? 'http://127.0.0.1:8787';
   const RELAY_WS = process.env.GBS_RELAY_WS ?? 'ws://127.0.0.1:8787';
   const relayUp = await fetch(`${RELAY_HTTP}/health`)
@@ -658,7 +716,7 @@ try {
     console.log('  Start one with: npm run relay:dev');
   } else {
     /** Speaks the room protocol from Node, the way a phone would. */
-    const openGuest = async (code) => {
+    openGuest = async (code) => {
       const socket = new WebSocket(`${RELAY_WS}/join?code=${code}`);
       const seat = await new Promise((resolve, reject) => {
         const timer = setTimeout(() => reject(new Error('the room never gave a seat')), 8000);
@@ -971,6 +1029,357 @@ try {
     if (!shelf.includes('Drift')) throw new Error(`shelf held: ${shelf.join(', ') || 'nothing'}`);
     await page.shot('continue');
   });
+
+  console.log('\nHosted games:');
+
+  /**
+   * The milestone's claims, tested rather than asserted.
+   *
+   * These need a hosted origin (`npm run hosted:dev`) and an application built
+   * with NEXT_PUBLIC_HOSTED_MANIFEST_URL pointing at it. Without those the
+   * feature is off by design, so the checks skip loudly rather than pretend.
+   */
+  const HOSTED_ORIGIN = process.env.GBS_HOSTED_ORIGIN ?? 'http://127.0.0.1:8788';
+  const hostedUp = await fetch(`${HOSTED_ORIGIN}/manifest.json`)
+    .then((response) => response.ok)
+    .catch(() => false);
+
+  if (!hostedUp) {
+    console.log(`  no hosted origin on ${HOSTED_ORIGIN} — SKIPPED, which is not a pass.`);
+    console.log('  Start one with: npm run hosted:build && npm run hosted:dev');
+  } else {
+    const frameEval = (expression) => page.evaluate(`(() => {
+      const frame = document.querySelector('[data-testid="hosted-frame"]');
+      if (!frame) return 'NO FRAME';
+      return ${expression};
+    })()`);
+
+    await check('a hosted game appears in the library without being compiled in', async () => {
+      await page.goto(`${base}/`);
+      const deadline = Date.now() + 8000;
+      for (;;) {
+        const titles = await page.evaluate(
+          `[...document.querySelectorAll('[data-testid="library-grid"] a')].map((a) => a.textContent).join('|')`,
+        );
+        if (/Ring Out \(hosted\)/.test(titles)) break;
+        if (Date.now() > deadline) throw new Error(`hosted games never appeared: ${titles}`);
+        await sleep(250);
+      }
+    });
+
+    await check('a hosted game plays, and it is a sandboxed frame', async () => {
+      await page.goto(`${base}/games/drift-hosted`);
+      await sleep(3500);
+      const sandbox = await frameEval(`frame.getAttribute('sandbox')`);
+      if (sandbox !== 'allow-scripts') {
+        throw new Error(`sandbox was "${sandbox}" — allow-same-origin would void the boundary`);
+      }
+      const src = await frameEval(`frame.getAttribute('src')`);
+      if (!src.startsWith(HOSTED_ORIGIN)) throw new Error(`frame src was ${src}`);
+      await page.shot('hosted-drift');
+    });
+
+    await check('the sandboxed game cannot reach the parent page', async () => {
+      // A boundary nobody tried to cross is not a boundary. Each of these is
+      // attempted from inside the frame and must be denied by the browser.
+      const result = await page.evaluate(`(() => {
+        const frame = document.querySelector('[data-testid="hosted-frame"]');
+        const out = {};
+        try { out.document = frame.contentDocument === null ? 'denied' : 'REACHED'; }
+        catch { out.document = 'denied'; }
+        try { const w = frame.contentWindow; void w.location.href; out.location = 'REACHED'; }
+        catch { out.location = 'denied'; }
+        try { void frame.contentWindow.localStorage; out.storage = 'REACHED'; }
+        catch { out.storage = 'denied'; }
+        return out;
+      })()`);
+      const reached = Object.entries(result).filter(([, value]) => value !== 'denied');
+      if (reached.length > 0) {
+        throw new Error(`the sandbox was crossed: ${JSON.stringify(result)}`);
+      }
+    });
+
+    /**
+     * Input has to be proven through something the host can observe.
+     *
+     * The obvious check — read the game's canvas — is impossible on purpose:
+     * a sandboxed opaque-origin frame is out-of-process, so it is not even in
+     * the parent's frame tree. That is the isolation working, and it means the
+     * proof runs through the bridge instead. Drift only records a score after
+     * collecting a core, which cannot happen without thrust, so a save arriving
+     * is input having crossed.
+     */
+    const SAVE_KEY = 'gbstudio.save.v1.drift-hosted';
+    const savedBytes = () => page.evaluate(`window.localStorage.getItem('${SAVE_KEY}')`);
+
+    await check('the harness can see inside the frame, so input can be measured', async () => {
+      // Not a product claim — a harness capability. Without it the only proof
+      // of input would be the slow save path, and the direct check below could
+      // not exist.
+      const size = await page.frameEvaluate(
+        `(() => { const c = document.querySelector('canvas'); return c ? c.width + 'x' + c.height : null; })()`,
+      );
+      if (size !== '320x288') throw new Error(`frame canvas was ${size}`);
+    });
+
+    await check('a keyboard press moves the hosted game, and idling does not', async () => {
+      const SHIP = `(() => {
+        const canvas = document.querySelector('canvas');
+        if (!canvas) return null;
+        const { data, width } = canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height);
+        const points = [];
+        for (let i = 0; i < data.length; i += 4) {
+          if (data[i] > 200 && data[i + 1] > 200 && data[i + 2] > 190) {
+            points.push([(i / 4) % width, Math.floor((i / 4) / width)]);
+          }
+        }
+        if (points.length < 8) return null;
+        const cx = points.reduce((sum, p) => sum + p[0], 0) / points.length;
+        const cy = points.reduce((sum, p) => sum + p[1], 0) / points.length;
+        return { x: cx, y: cy };
+      })()`;
+      const radius = async () => {
+        const ship = await page.frameEvaluate(SHIP);
+        return ship ? Math.hypot(ship.x - 160, ship.y - 144) : null;
+      };
+
+      // Wait for the game to be *running*, not merely drawn. The frame paints
+      // one frame on load before it is started, so a canvas that exists is not
+      // yet a canvas that moves — measuring then reports zero for everything
+      // and looks exactly like input being ignored.
+      const deadline = Date.now() + 20_000;
+      let start = null;
+      while (Date.now() < deadline) {
+        const first = await radius();
+        await sleep(500);
+        const second = await radius();
+        if (first !== null && second !== null && Math.abs(second - first) > 0.01) {
+          start = second;
+          break;
+        }
+        if (first === null) await sleep(300);
+      }
+      if (start === null) {
+        const state = await page.evaluate(`JSON.stringify({
+          gate: !!document.querySelector('[data-testid="play-gate"]'),
+          waiting: !!document.querySelector('[data-testid="waiting-for-players"]'),
+          coarse: window.matchMedia('(pointer: coarse)').matches,
+          hidden: document.hidden,
+          boot: !!document.querySelector('[data-testid="boot-state"]'),
+        })`);
+        throw new Error(`the hosted game never started moving — ${state}`);
+      }
+
+      // Drift's orbit is stable on its own, which is what makes the thrust
+      // measurement mean something rather than measuring the passage of time.
+      await sleep(1400);
+      const idleDrift = Math.abs((await radius()) - start);
+      const before = await radius();
+      await page.hold(KEYS.x, 1400);
+      await sleep(200);
+      const thrustDrift = Math.abs((await radius()) - before);
+
+      if (idleDrift > 12) throw new Error(`the orbit is not stable on its own (${idleDrift.toFixed(0)}px)`);
+      if (thrustDrift < 25) {
+        // A completely static canvas means the game is not running at all,
+        // which is a different failure from input not arriving. Say which.
+        const gate = await page.evaluate(
+          `!!document.querySelector('[data-testid="play-gate"]')`,
+        );
+        const coarse = await page.evaluate(`window.matchMedia('(pointer: coarse)').matches`);
+        throw new Error(
+          `thrust moved the orbit only ${thrustDrift.toFixed(0)}px ` +
+            `(idle drift ${idleDrift.toFixed(0)}px, play gate ${gate}, coarse ${coarse})`,
+        );
+      }
+    });
+
+    await check('a hosted game has no storage of its own', async () => {
+      // The control for the save check below. D-015 makes the host responsible
+      // for save storage; here that is not a policy but a fact of the sandbox,
+      // and it is what makes a save appearing in localStorage proof that it
+      // travelled the bridge rather than being written by the game.
+      const reach = await page.frameEvaluate(`(() => {
+        const out = {};
+        try { void window.localStorage; out.localStorage = 'REACHED'; }
+        catch { out.localStorage = 'denied'; }
+        try { void window.sessionStorage; out.sessionStorage = 'REACHED'; }
+        catch { out.sessionStorage = 'denied'; }
+        // Reading cookies does not return empty in a sandboxed document — it
+        // throws, which is a stronger result than the check first assumed.
+        try { out.cookie = document.cookie === '' ? 'empty' : 'REACHED'; }
+        catch { out.cookie = 'denied'; }
+        out.origin = String(window.origin);
+        return out;
+      })()`);
+      if (reach.localStorage !== 'denied' || reach.sessionStorage !== 'denied') {
+        throw new Error(`the sandbox has storage: ${JSON.stringify(reach)}`);
+      }
+      if (reach.cookie === 'REACHED') throw new Error('the sandbox can read cookies');
+      // An opaque origin is what denies all of the above.
+      if (reach.origin !== 'null') throw new Error(`frame origin was ${reach.origin}`);
+    });
+
+    await check('a hosted game save is persisted by the host', async () => {
+      const SAVE_KEY = 'gbstudio.save.v1.drift-hosted';
+      const saved = () => page.evaluate(`window.localStorage.getItem('${SAVE_KEY}')`);
+
+      await page.goto(`${base}/games/drift-hosted`);
+      // The resolver fetches the manifest, mounts the frame and waits for the
+      // game to boot, so this needs longer than a compiled page would.
+      await sleep(4000);
+      const deadline = Date.now() + 45_000;
+      while (Date.now() < deadline) {
+        if (await saved()) break;
+        await page.hold(KEYS.x, 900);
+        await sleep(600);
+      }
+      if (!(await saved())) throw new Error('played for 45s and nothing was saved');
+
+      // Real bytes, not merely present. The game cannot have written them: the
+      // check above proves it has nowhere to write.
+      const best = await page.evaluate(`(() => {
+        const bytes = Uint8Array.from(atob(window.localStorage.getItem('${SAVE_KEY}')), (c) => c.charCodeAt(0));
+        return { version: bytes[0], best: new DataView(bytes.buffer).getUint32(1, true) };
+      })()`);
+      if (best.version !== 1 || best.best < 1) {
+        throw new Error(`the saved bytes were ${JSON.stringify(best)}`);
+      }
+
+      // And it comes back: a reload restores it into the frame rather than
+      // starting the player over.
+      await page.goto(`${base}/games/drift-hosted`);
+      await sleep(3000);
+      const restored = await page.frameEvaluate(`(() => {
+        const canvas = document.querySelector('canvas');
+        const { data } = canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height);
+        let lit = 0;
+        for (let i = 0; i < data.length; i += 4) if (data[i] > 40) lit += 1;
+        return lit;
+      })()`);
+      if (!(restored > 0)) throw new Error('the game did not come back after a reload');
+      await page.shot('hosted-save');
+    });
+
+    await check('an M4 phone controller drives a hosted game', async () => {
+      if (!relayUp || !openGuest) {
+        throw new Error('the relay is not running, so M4 equivalence cannot be checked');
+      }
+
+      // Every layer at once: phone -> relay -> InputRouter -> frame bridge ->
+      // hosted game, measured inside the sandbox.
+      await page.goto(`${base}/games/ring-out-hosted`);
+      await sleep(3500);
+
+      const opened = await page.evaluate(`(() => {
+        const button = document.querySelector('[data-testid="invite-open"]');
+        if (!button) return false;
+        button.click();
+        return true;
+      })()`);
+      if (!opened) throw new Error('no Invite button on a hosted multiplayer game');
+
+      let code = null;
+      const codeDeadline = Date.now() + 8000;
+      while (Date.now() < codeDeadline) {
+        const seen = await page.evaluate(
+          `document.querySelector('[data-testid="invite-code"]')?.textContent ?? ''`,
+        );
+        if (/^[A-Z0-9]{6}$/.test(seen)) { code = seen; break; }
+        await sleep(200);
+      }
+      if (!code) throw new Error('the hosted game never produced a room code');
+
+      const guest = await openGuest(code);
+      const hex = guest.seat.slot === 0 ? [0x9b, 0xbc, 0x0f] : [0xe0, 0xa3, 0x3e];
+      const FIGHTER = `(() => {
+        const canvas = document.querySelector('canvas');
+        if (!canvas) return null;
+        const { data, width } = canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height);
+        let sx = 0, sy = 0, n = 0;
+        for (let i = 0; i < data.length; i += 4) {
+          if (Math.abs(data[i] - ${hex[0]}) < 40 && Math.abs(data[i + 1] - ${hex[1]}) < 40
+              && Math.abs(data[i + 2] - ${hex[2]}) < 40) {
+            sx += (i / 4) % width; sy += Math.floor((i / 4) / width); n += 1;
+          }
+        }
+        return n === 0 ? null : { x: sx / n, y: sy / n, count: n };
+      })()`;
+
+      let moved = null;
+      for (let attempt = 0; attempt < 5 && !moved; attempt += 1) {
+        const before = await page.frameEvaluate(FIGHTER);
+        if (before?.count) {
+          guest.press('right', true);
+          await sleep(300);
+          guest.press('right', false);
+          await sleep(150);
+          const after = await page.frameEvaluate(FIGHTER);
+          if (after?.count && after.x > before.x + 4) moved = { before, after };
+        }
+        if (!moved) await sleep(1700); // outlast a round change
+      }
+      guest.socket.close();
+      if (!moved) throw new Error('the phone pressed right and nothing moved inside the frame');
+      await page.shot('hosted-phone');
+    });
+
+    await check('changing a hosted game needs no application rebuild', async () => {
+      // THE milestone claim. The application is already built and running; only
+      // the hosted origin changes, and the page is reloaded normally rather
+      // than force-refreshed, because "works on an ordinary reload" is the
+      // claim being made.
+      const { execFileSync } = await import('node:child_process');
+      const label = `swap-${Date.now()}`;
+      const nextBuildBefore = fs.statSync(`${REPO}/.next/BUILD_ID`).mtimeMs;
+
+      execFileSync(
+        'node',
+        [`${REPO}/hosted-games/build.mjs`, '--version', '1.1.0', '--label', label],
+        { cwd: REPO, stdio: 'ignore' },
+      );
+
+      await page.goto(`${base}/games/drift-hosted`);
+      const deadline = Date.now() + 12_000;
+      for (;;) {
+        const src = await frameEval(`frame.getAttribute('src')`);
+        if (typeof src === 'string' && src.includes('/1.1.0/')) break;
+        if (Date.now() > deadline) throw new Error(`frame still points at ${src}`);
+        await sleep(400);
+        await page.goto(`${base}/games/drift-hosted`);
+      }
+
+      const nextBuildAfter = fs.statSync(`${REPO}/.next/BUILD_ID`).mtimeMs;
+      if (nextBuildAfter !== nextBuildBefore) {
+        throw new Error('the application was rebuilt, so this proves nothing');
+      }
+      await page.shot('hosted-swapped');
+    });
+
+    await check('rollback is the same action, not a special case', async () => {
+      const { execFileSync } = await import('node:child_process');
+      execFileSync('node', [`${REPO}/hosted-games/build.mjs`, '--version', '1.0.0'], {
+        cwd: REPO,
+        stdio: 'ignore',
+      });
+      await page.goto(`${base}/games/drift-hosted`);
+      const deadline = Date.now() + 12_000;
+      for (;;) {
+        const src = await frameEval(`frame.getAttribute('src')`);
+        if (typeof src === 'string' && src.includes('/1.0.0/')) break;
+        if (Date.now() > deadline) throw new Error(`frame still points at ${src}`);
+        await sleep(400);
+        await page.goto(`${base}/games/drift-hosted`);
+      }
+    });
+
+    await check('a slug in neither catalog is an honest not-found', async () => {
+      await page.goto(`${base}/games/definitely-not-a-game`);
+      await sleep(2500);
+      const text = await page.evaluate(`document.body.innerText`);
+      if (!/not here/i.test(text)) throw new Error(`page said: ${text.slice(0, 120)}`);
+    });
+  }
 
   console.log('\nHandheld mode:');
 

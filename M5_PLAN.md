@@ -298,6 +298,61 @@ possible later.
 | Two catalogs drift apart in shape | The manifest is validated into the existing `Game` type, so there is one shape in the app |
 | iframe autoplay and fullscreen policy differences | S4 owns them explicitly rather than discovering them on a phone |
 
+## What S4-S6 produced, and what they taught
+
+**The artifacts are genuinely separate.** `hosted-games/build.mjs` has its own
+entry points and writes into the hosted origin, never into `.next`. esbuild is
+used narrowly as a build tool for these files: not a runtime dependency, not an
+engine abstraction. `verify:bundles` now asserts the application build contains
+no hosted artifact and that the artifacts live outside its output.
+
+**Ring Out and Drift are imported unmodified.** A shim maps the native contract
+onto the hosted one, which is what makes them a usable control: if a hosted game
+behaves differently, the difference is the hosting.
+
+**The sandbox is stronger than expected, and it changed how input is proven.**
+A frame sandboxed without `allow-same-origin` gets an opaque origin *and* runs
+out-of-process, so it does not even appear in the parent's frame tree. The
+obvious check — read the game's canvas from the page — is impossible by design.
+The harness reaches it with an attached debugger session instead, which does not
+weaken the claim: the claim is about what a *page* can reach, and a debugger is
+not a page.
+
+Isolation turned out to have two independent layers. Weakening the sandbox to
+`allow-scripts allow-same-origin` still failed the storage check, but *not* the
+parent-reach check — because the hosted origin is also a different origin, so
+same-origin policy denies it a second time. Worth knowing: neither layer alone
+is the whole boundary.
+
+**Two real bugs the checks caught.**
+
+`start()` returned before recording that start had been requested, so pressing
+play while the frame was still loading did nothing.
+
+The SDK's `reset` passed `players: 1` rather than the session's count, which
+would have quietly turned a two-player hosted game into a one-player one on
+every press of Restart.
+
+**One product bug M5 introduced, caught by an existing check.** The library's
+"Originals" filter tested `console === null`, which was the same set as "games
+we wrote" until hosted games arrived — those have no console either. It now
+tests `runtime === 'native'`.
+
+**Three checks had to be rewritten because they could not fail.**
+
+A "no input means no save" control was invalid for Drift: a core can sit on the
+default orbit and be collected passively. The save proof is now that the sandbox
+has *no storage at all* — verified from inside the frame — so a save existing in
+`localStorage` can only have crossed the bridge.
+
+A `document.cookie` check assumed an empty string; a sandboxed document throws
+instead, which is a stronger result than the check assumed.
+
+The direct input check measured before the game had started animating: a frame
+paints once on load, so a canvas that exists is not yet a canvas that moves, and
+measuring then reports zero for everything and looks exactly like input being
+ignored.
+
 ## Definition of done
 
 1. A hosted game is built by its own build, deployed to its own origin, and

@@ -10,10 +10,11 @@
  * sharing one matters.
  */
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { GameCard } from '@/components/GameCard';
 import { CONSOLE_LABELS, isMultiplayer, searchGames, type Game } from '@/catalog';
 import type { ConsoleId } from '@/emulation/core/types';
+import { loadHostedGames } from '@/hosted/loadHostedGames';
 
 /** 'original' is not a console, but from the shelf it reads as one more source. */
 type ConsoleFilter = ConsoleId | 'all' | 'original';
@@ -26,22 +27,47 @@ export function GameLibrary({
   consoles: readonly ConsoleId[];
 }) {
   const [query, setQuery] = useState('');
-  const [console, setConsole] = useState<ConsoleFilter>('all');
+  const [consoleFilter, setConsole] = useState<ConsoleFilter>('all');
   const [twoPlayer, setTwoPlayer] = useState(false);
+  const [hosted, setHosted] = useState<readonly Game[]>([]);
 
-  const hasOriginals = useMemo(() => games.some((game) => game.console === null), [games]);
-  const hasMultiplayer = useMemo(() => games.some(isMultiplayer), [games]);
+  /**
+   * Hosted games arrive after the page does, on purpose.
+   *
+   * The compiled catalog is rendered by the server and never waits on the
+   * network — the Instant Contract is binding, so a slow or dead hosted origin
+   * must cost the player nothing. Hosted titles simply appear when they resolve,
+   * and never at all if they do not.
+   */
+  useEffect(() => {
+    const controller = new AbortController();
+    void loadHostedGames(controller.signal).then((result) => {
+      if (controller.signal.aborted) return;
+      if (result.games.length > 0) setHosted(result.games);
+      if (result.problem) console.warn('[GameBoyStudio] hosted games:', result.problem);
+    });
+    return () => controller.abort();
+  }, []);
+
+  const allGames = useMemo(() => [...games, ...hosted], [games, hosted]);
+
+  // An Original is a first-party game we wrote, which is `runtime: 'native'`.
+  // It used to be tested as "has no console", which was the same set until
+  // hosted games arrived — those have no console either, and are not ours.
+  const isOriginal = (game: Game) => game.runtime === 'native';
+  const hasOriginals = useMemo(() => allGames.some(isOriginal), [allGames]);
+  const hasMultiplayer = useMemo(() => allGames.some(isMultiplayer), [allGames]);
 
   const visible = useMemo(() => {
     const byConsole =
-      console === 'all'
-        ? games
-        : console === 'original'
-          ? games.filter((game) => game.console === null)
-          : games.filter((game) => game.console === console);
+      consoleFilter === 'all'
+        ? allGames
+        : consoleFilter === 'original'
+          ? allGames.filter(isOriginal)
+          : allGames.filter((game) => game.console === consoleFilter);
     const byPlayers = twoPlayer ? byConsole.filter(isMultiplayer) : byConsole;
     return searchGames(byPlayers, query);
-  }, [games, console, twoPlayer, query]);
+  }, [allGames, consoleFilter, twoPlayer, query]);
 
   return (
     <>
@@ -59,12 +85,12 @@ export function GameLibrary({
         </div>
 
         <nav aria-label="Filter by console" className="flex flex-wrap gap-2">
-          <FilterChip active={console === 'all'} onClick={() => setConsole('all')}>
+          <FilterChip active={consoleFilter === 'all'} onClick={() => setConsole('all')}>
             All
           </FilterChip>
           {hasOriginals ? (
             <FilterChip
-              active={console === 'original'}
+              active={consoleFilter === 'original'}
               onClick={() => setConsole('original')}
             >
               Originals
@@ -73,7 +99,7 @@ export function GameLibrary({
           {consoles.map((id) => (
             <FilterChip
               key={id}
-              active={console === id}
+              active={consoleFilter === id}
               onClick={() => setConsole(id)}
             >
               {CONSOLE_LABELS[id]}

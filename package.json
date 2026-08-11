@@ -24,7 +24,8 @@
     "hosted:dev": "wrangler dev --config hosted-origin/wrangler.toml --port 8788",
     "hosted:deploy": "wrangler deploy --config hosted-origin/wrangler.toml",
     "verify:hosted-cache": "node scripts/verify-hosted-cache.mjs",
-    "verify:frame": "node scripts/verify-frame.mjs"
+    "verify:frame": "node scripts/verify-frame.mjs",
+    "hosted:build": "node hosted-games/build.mjs"
   },
   "dependencies": {
     "next": "16.3.0",
@@ -38,6 +39,7 @@
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "esbuild": "^0.28.2",
     "eslint": "^9",
     "eslint-config-next": "16.3.0",
     "tailwindcss": "^4",
