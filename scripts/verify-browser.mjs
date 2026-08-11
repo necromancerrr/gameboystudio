@@ -47,6 +47,36 @@ if (!chrome) {
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
+/** No DevTools command in this suite legitimately takes this long. */
+const CDP_TIMEOUT_MS = Number(process.env.GBS_CDP_TIMEOUT ?? 30_000);
+/**
+ * A ceiling per check. The slowest legitimate ones fly Drift for 45 seconds,
+ * so this is generous — it exists to end a wedged check, not to police speed.
+ */
+const CHECK_TIMEOUT_MS = Number(process.env.GBS_CHECK_TIMEOUT ?? 180_000);
+
+/**
+ * Commands that can be sent twice without changing the outcome. Deliberately
+ * excludes Runtime.evaluate and every Input command: some of those click
+ * things, and a retried click is a different test.
+ */
+/**
+ * How many DevTools calls may time out in a row before the run gives up.
+ *
+ * Once the browser stops answering it does not come back, and grinding through
+ * thirty more checks at thirty seconds each produces a wall of failures that
+ * hides which one actually broke. Stopping names the check that lost it.
+ */
+const UNRESPONSIVE_LIMIT = 3;
+
+const RETRYABLE_CDP = new Set([
+  'Page.navigate',
+  'Page.bringToFront',
+  'Page.getFrameTree',
+  'Page.captureScreenshot',
+  'Page.createIsolatedWorld',
+]);
+
 async function waitForPort(port, timeoutMs = 30_000) {
   const deadline = Date.now() + timeoutMs;
   for (;;) {
@@ -68,24 +98,90 @@ class Session {
     this.nextId = 1;
     this.pending = new Map();
     this.events = [];
+    /** Sessions attached to out-of-process frames, newest last. */
+    this.frameSessions = [];
+    /** Set once the browser has stopped answering; the run then gives up. */
+    this.dead = false;
+    this.consecutiveTimeouts = 0;
     socket.addEventListener('message', (message) => {
       const data = JSON.parse(message.data);
-      if (data.id && this.pending.has(data.id)) {
-        const { resolve, reject } = this.pending.get(data.id);
-        this.pending.delete(data.id);
+      // Keyed by session as well as id: with flattened auto-attach, every
+      // attached frame has its own id space on this one socket, so matching on
+      // id alone lets a frame's reply resolve a page request. The real request
+      // then stays pending forever — a hang with the process idle, which is
+      // exactly how this showed up.
+      const key = `${data.sessionId ?? ''}:${data.id}`;
+      if (data.id && this.pending.has(key)) {
+        const { resolve, reject } = this.pending.get(key);
+        this.pending.delete(key);
         if (data.error) reject(new Error(data.error.message));
         else resolve(data.result);
       } else if (data.method) {
         this.events.push(data.method);
+        // A sandboxed opaque-origin frame is its own process, so it never
+        // appears in the parent's frame tree. It arrives here instead.
+        if (data.method === 'Target.attachedToTarget' && data.params?.targetInfo?.type === 'iframe') {
+          this.frameSessions.push(data.params.sessionId);
+        }
+        if (data.method === 'Target.detachedFromTarget') {
+          this.frameSessions = this.frameSessions.filter((id) => id !== data.params?.sessionId);
+        }
       }
     });
   }
 
-  send(method, params = {}) {
+  /**
+   * Sends a command and refuses to wait forever for the answer.
+   *
+   * An unanswered CDP call used to leave the suite idle with no output, which
+   * is indistinguishable from a slow check and impossible to diagnose after the
+   * fact. Now it fails, names the method, and the run continues to the next
+   * check — a bounded failure beats an unbounded wait.
+   */
+  /**
+   * Retried once, and only for commands that are safe to repeat.
+   *
+   * A busy browser occasionally misses a command; repeating a navigation or a
+   * screenshot costs nothing. Repeating `Runtime.evaluate` or an input event
+   * would not be safe — some of those click buttons — so those fail on the
+   * first timeout and say so.
+   */
+  async send(method, params = {}, sessionId, timeoutMs = CDP_TIMEOUT_MS) {
+    const retryable = RETRYABLE_CDP.has(method);
+    try {
+      return await this.sendOnce(method, params, sessionId, timeoutMs);
+    } catch (error) {
+      if (!retryable) throw error;
+      console.log(`       (retrying ${method} after: ${error.message})`);
+      return this.sendOnce(method, params, sessionId, timeoutMs);
+    }
+  }
+
+  sendOnce(method, params = {}, sessionId, timeoutMs = CDP_TIMEOUT_MS) {
+    if (this.dead) {
+      return Promise.reject(new Error('the browser stopped responding earlier in this run'));
+    }
     const id = this.nextId++;
+    const key = `${sessionId ?? ''}:${id}`;
     return new Promise((resolve, reject) => {
-      this.pending.set(id, { resolve, reject });
-      this.socket.send(JSON.stringify({ id, method, params }));
+      const timer = setTimeout(() => {
+        this.pending.delete(key);
+        this.consecutiveTimeouts += 1;
+        if (this.consecutiveTimeouts >= UNRESPONSIVE_LIMIT) this.dead = true;
+        reject(new Error(`CDP ${method} did not answer within ${timeoutMs}ms`));
+      }, timeoutMs);
+      this.pending.set(key, {
+        resolve: (value) => {
+          clearTimeout(timer);
+          this.consecutiveTimeouts = 0;
+          resolve(value);
+        },
+        reject: (error) => {
+          clearTimeout(timer);
+          reject(error);
+        },
+      });
+      this.socket.send(JSON.stringify({ id, method, params, ...(sessionId ? { sessionId } : {}) }));
     });
   }
 
@@ -102,6 +198,15 @@ class Session {
   }
 
   async goto(url) {
+    // Frame sessions belong to the document being left. Keeping them would let
+    // a later check read a dead frame's canvas and see a game that never moves,
+    // which looks exactly like input not working.
+    this.frameSessions = [];
+    // A backgrounded page throttles requestAnimationFrame to nothing, so every
+    // check that watches something move would fail for a reason that has
+    // nothing to do with the code under test. Cheap, and it makes "the screen
+    // never changed" mean what it says.
+    await this.send('Page.bringToFront').catch(() => {});
     await this.send('Page.navigate', { url });
     // The pages are static; a short settle beats parsing lifecycle events.
     await sleep(900);
@@ -124,7 +229,33 @@ class Session {
     await this.key('keyUp', descriptor);
   }
 
+  /**
+   * Evaluates inside a child frame.
+   *
+   * The page cannot read a sandboxed frame's DOM — that is the isolation being
+   * tested elsewhere in this file — so the harness borrows DevTools privileges
+   * instead, via an isolated world. This does not weaken the boundary: the
+   * claim is about what a *page* can reach, and a debugger is not a page.
+   */
+  async frameEvaluate(expression) {
+    const sessionId = this.frameSessions[this.frameSessions.length - 1];
+    if (!sessionId) throw new Error('no sandboxed frame is attached');
+    const result = await this.send(
+      'Runtime.evaluate',
+      { expression, awaitPromise: true, returnByValue: true },
+      sessionId,
+    );
+    if (result.exceptionDetails) {
+      throw new Error(result.exceptionDetails.exception?.description ?? 'frame evaluate failed');
+    }
+    return result.result.value;
+  }
+
   async shot(name) {
+    // Screenshots are diagnostics, never assertions, so they can be dropped
+    // when the machine is short of memory — which is exactly when
+    // Page.captureScreenshot is the call most likely not to answer.
+    if (process.env.GBS_NO_SHOTS) return;
     const { data } = await this.send('Page.captureScreenshot', { format: 'png' });
     fs.mkdirSync(SHOT_DIR, { recursive: true });
     fs.writeFileSync(`${SHOT_DIR}/${name}.png`, Buffer.from(data, 'base64'));
@@ -225,6 +356,7 @@ async function movesWhen({ press, read, other, expect, attempts = 4 }) {
 
 let passed = 0;
 let skipped = 0;
+let abandoned = 0;
 const failures = [];
 
 /**
@@ -238,18 +370,46 @@ const ONLY = (process.env.GBS_ONLY ?? '')
   .map((term) => term.trim())
   .filter(Boolean);
 
+/** Set when the browser stopped answering, so the rest of the run is abandoned. */
+let unresponsiveAt = null;
+/** Assigned once the debugger connects; `check` reads it to notice a dead browser. */
+let page = null;
+
 async function check(name, body) {
   if (ONLY.length > 0 && !ONLY.some((term) => name.toLowerCase().includes(term))) {
     skipped += 1;
     return;
   }
+  if (unresponsiveAt) {
+    // Not counted as skipped-by-filter: these were never given a chance.
+    abandoned += 1;
+    return;
+  }
+  let guard;
   try {
-    await body();
+    // Raced rather than awaited: a check that wedges must name itself and let
+    // the suite carry on, instead of leaving a silent process behind.
+    await Promise.race([
+      body(),
+      new Promise((_, reject) => {
+        guard = setTimeout(
+          () => reject(new Error(`the check itself wedged after ${CHECK_TIMEOUT_MS}ms`)),
+          CHECK_TIMEOUT_MS,
+        );
+      }),
+    ]);
     console.log(`  ok   ${name}`);
     passed += 1;
   } catch (error) {
     console.log(`  FAIL ${name}\n       ${String(error.message).split('\n')[0]}`);
     failures.push(name);
+    if (page?.dead) {
+      unresponsiveAt = name;
+      console.log('\n  The browser stopped responding. Abandoning the rest of the run —');
+      console.log('  it does not recover, and thirty more timeouts would bury the cause.');
+    }
+  } finally {
+    clearTimeout(guard);
   }
 }
 
@@ -259,11 +419,26 @@ async function check(name, body) {
  * server-side, so the library checks pass and every check that needs client
  * JavaScript fails — an hour of debugging the wrong thing. Refuse to start.
  */
-const portBusy = await new Promise((resolve) => {
-  const socket = net.connect(PORT, '127.0.0.1');
-  socket.on('connect', () => { socket.end(); resolve(true); });
-  socket.on('error', () => resolve(false));
-});
+const busy = (port) =>
+  new Promise((resolve) => {
+    const socket = net.connect(port, '127.0.0.1');
+    socket.on('connect', () => { socket.end(); resolve(true); });
+    socket.on('error', () => resolve(false));
+  });
+
+/**
+ * A second harness already running is the quiet killer here: two Chromes
+ * compete, checks time out for reasons unrelated to the code, and the results
+ * of both runs are worthless. Refuse rather than add to the pile.
+ */
+if (await busy(DEBUG_PORT)) {
+  console.log(`Something is already using the debug port ${DEBUG_PORT}.`);
+  console.log('Another verify-browser run is probably still going. Stop it first —');
+  console.log('two of these at once make both sets of results meaningless.');
+  process.exit(1);
+}
+
+const portBusy = await busy(PORT);
 if (portBusy) {
   console.log(`Something is already listening on ${PORT}. Stop it first — a stale`);
   console.log('server serves an old build and turns these checks into nonsense.');
@@ -285,6 +460,11 @@ const browser = spawn(
     '--no-sandbox',
     '--disable-gpu',
     '--hide-scrollbars',
+    // Deliberately no throttling or shared-memory flags here. Adding the usual
+    // CI set (--disable-dev-shm-usage, --disable-renderer-backgrounding and
+    // friends) was tried and made this measurably worse — the browser wedged
+    // early and never recovered, taking a run from four failures to thirty.
+    // Page.bringToFront is what keeps animation checks on a visible page.
     '--window-size=1280,900',
     '--autoplay-policy=no-user-gesture-required',
     'about:blank',
@@ -320,9 +500,17 @@ try {
     socket.addEventListener('open', resolve);
     socket.addEventListener('error', reject);
   });
-  const page = new Session(socket);
+  page = new Session(socket);
   await page.send('Page.enable');
   await page.send('Runtime.enable');
+  // Sandboxed frames run out-of-process, so reaching them needs an attached
+  // session rather than the parent's frame tree. Flattened, so their messages
+  // arrive on this same socket tagged with a sessionId.
+  await page.send('Target.setAutoAttach', {
+    autoAttach: true,
+    waitForDebuggerOnStart: false,
+    flatten: true,
+  });
 
   /**
    * A controller the test can drive. Headless Chromium exposes no real pads,
@@ -366,7 +554,9 @@ try {
     const tiles = await page.evaluate(
       `[...document.querySelectorAll('[data-testid="library-grid"] li h3')].map((h) => h.textContent)`,
     );
-    if (tiles.length !== 22) throw new Error(`expected 22 tiles, saw ${tiles.length}`);
+    // At least, not exactly: hosted games are fetched at runtime and join the
+    // same grid, so the compiled catalog is a floor rather than the total.
+    if (tiles.length < 22) throw new Error(`expected at least 22 tiles, saw ${tiles.length}`);
     if (!tiles.includes('Drift') || !tiles.includes('Ring Out')) {
       throw new Error('Originals missing from the grid');
     }
@@ -381,7 +571,16 @@ try {
     const tiles = await page.evaluate(
       `[...document.querySelectorAll('[data-testid="library-grid"] li h3')].map((h) => h.textContent)`,
     );
+    // Exactly ours, and nothing else. Hosted games also have no console, so
+    // this would quietly include them if "Original" were defined that way.
     if (tiles.join('|') !== 'Drift|Ring Out') throw new Error(`filter showed ${tiles.join(', ')}`);
+  });
+
+  await check('a hosted game is not filed as one of our Originals', async () => {
+    const tiles = await page.evaluate(
+      `[...document.querySelectorAll('[data-testid="library-grid"] li h3')].map((h) => h.textContent).join('|')`,
+    );
+    if (/hosted/i.test(tiles)) throw new Error(`the Originals filter showed ${tiles}`);
   });
 
   await check('search still finds a retro game', async () => {
@@ -647,6 +846,9 @@ try {
    * WebSocket, through the real relay, and has to move pixels on the host's
    * screen. Nothing here reaches into the page's state.
    */
+  /** Assigned by the Rooms section; the hosted checks reuse it. */
+  let openGuest = null;
+
   const RELAY_HTTP = process.env.GBS_RELAY_HTTP ?? 'http://127.0.0.1:8787';
   const RELAY_WS = process.env.GBS_RELAY_WS ?? 'ws://127.0.0.1:8787';
   const relayUp = await fetch(`${RELAY_HTTP}/health`)
@@ -658,7 +860,7 @@ try {
     console.log('  Start one with: npm run relay:dev');
   } else {
     /** Speaks the room protocol from Node, the way a phone would. */
-    const openGuest = async (code) => {
+    openGuest = async (code) => {
       const socket = new WebSocket(`${RELAY_WS}/join?code=${code}`);
       const seat = await new Promise((resolve, reject) => {
         const timer = setTimeout(() => reject(new Error('the room never gave a seat')), 8000);
@@ -972,6 +1174,354 @@ try {
     await page.shot('continue');
   });
 
+  console.log('\nHosted games:');
+
+  /**
+   * The milestone's claims, tested rather than asserted.
+   *
+   * These need a hosted origin (`npm run hosted:dev`) and an application built
+   * with NEXT_PUBLIC_HOSTED_MANIFEST_URL pointing at it. Without those the
+   * feature is off by design, so the checks skip loudly rather than pretend.
+   */
+  const HOSTED_ORIGIN = process.env.GBS_HOSTED_ORIGIN ?? 'http://127.0.0.1:8788';
+  const hostedUp = await fetch(`${HOSTED_ORIGIN}/manifest.json`)
+    .then((response) => response.ok)
+    .catch(() => false);
+
+  if (!hostedUp) {
+    console.log(`  no hosted origin on ${HOSTED_ORIGIN} — SKIPPED, which is not a pass.`);
+    console.log('  Start one with: npm run hosted:build && npm run hosted:dev');
+  } else {
+    const frameEval = (expression) => page.evaluate(`(() => {
+      const frame = document.querySelector('[data-testid="hosted-frame"]');
+      if (!frame) return 'NO FRAME';
+      return ${expression};
+    })()`);
+
+    await check('a hosted game appears in the library without being compiled in', async () => {
+      await page.goto(`${base}/`);
+      const deadline = Date.now() + 8000;
+      for (;;) {
+        const titles = await page.evaluate(
+          `[...document.querySelectorAll('[data-testid="library-grid"] a')].map((a) => a.textContent).join('|')`,
+        );
+        if (/Ring Out \(hosted\)/.test(titles)) break;
+        if (Date.now() > deadline) throw new Error(`hosted games never appeared: ${titles}`);
+        await sleep(250);
+      }
+    });
+
+    await check('a hosted game plays, and it is a sandboxed frame', async () => {
+      await page.goto(`${base}/games/drift-hosted`);
+      await sleep(3500);
+      const sandbox = await frameEval(`frame.getAttribute('sandbox')`);
+      if (sandbox !== 'allow-scripts') {
+        throw new Error(`sandbox was "${sandbox}" — allow-same-origin would void the boundary`);
+      }
+      const src = await frameEval(`frame.getAttribute('src')`);
+      if (!src.startsWith(HOSTED_ORIGIN)) throw new Error(`frame src was ${src}`);
+      await page.shot('hosted-drift');
+    });
+
+    await check('the sandboxed game cannot reach the parent page', async () => {
+      // A boundary nobody tried to cross is not a boundary. Each of these is
+      // attempted from inside the frame and must be denied by the browser.
+      const result = await page.evaluate(`(() => {
+        const frame = document.querySelector('[data-testid="hosted-frame"]');
+        const out = {};
+        try { out.document = frame.contentDocument === null ? 'denied' : 'REACHED'; }
+        catch { out.document = 'denied'; }
+        try { const w = frame.contentWindow; void w.location.href; out.location = 'REACHED'; }
+        catch { out.location = 'denied'; }
+        try { void frame.contentWindow.localStorage; out.storage = 'REACHED'; }
+        catch { out.storage = 'denied'; }
+        return out;
+      })()`);
+      const reached = Object.entries(result).filter(([, value]) => value !== 'denied');
+      if (reached.length > 0) {
+        throw new Error(`the sandbox was crossed: ${JSON.stringify(result)}`);
+      }
+    });
+
+    /**
+     * Input has to be proven through something the host can observe.
+     *
+     * The obvious check — read the game's canvas — is impossible on purpose:
+     * a sandboxed opaque-origin frame is out-of-process, so it is not even in
+     * the parent's frame tree. That is the isolation working, and it means the
+     * proof runs through the bridge instead. Drift only records a score after
+     * collecting a core, which cannot happen without thrust, so a save arriving
+     * is input having crossed.
+     */
+    await check('the harness can see inside the frame, so input can be measured', async () => {
+      // Not a product claim — a harness capability. Without it the only proof
+      // of input would be the slow save path, and the direct check below could
+      // not exist.
+      const size = await page.frameEvaluate(
+        `(() => { const c = document.querySelector('canvas'); return c ? c.width + 'x' + c.height : null; })()`,
+      );
+      if (size !== '320x288') throw new Error(`frame canvas was ${size}`);
+    });
+
+    await check('a keyboard press moves the hosted game, and idling does not', async () => {
+      const SHIP = `(() => {
+        const canvas = document.querySelector('canvas');
+        if (!canvas) return null;
+        const { data, width } = canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height);
+        const points = [];
+        for (let i = 0; i < data.length; i += 4) {
+          if (data[i] > 200 && data[i + 1] > 200 && data[i + 2] > 190) {
+            points.push([(i / 4) % width, Math.floor((i / 4) / width)]);
+          }
+        }
+        if (points.length < 8) return null;
+        const cx = points.reduce((sum, p) => sum + p[0], 0) / points.length;
+        const cy = points.reduce((sum, p) => sum + p[1], 0) / points.length;
+        return { x: cx, y: cy };
+      })()`;
+      const radius = async () => {
+        const ship = await page.frameEvaluate(SHIP);
+        return ship ? Math.hypot(ship.x - 160, ship.y - 144) : null;
+      };
+
+      // Wait for the game to be *running*, not merely drawn. The frame paints
+      // one frame on load before it is started, so a canvas that exists is not
+      // yet a canvas that moves — measuring then reports zero for everything
+      // and looks exactly like input being ignored.
+      const deadline = Date.now() + 20_000;
+      let start = null;
+      while (Date.now() < deadline) {
+        const first = await radius();
+        await sleep(500);
+        const second = await radius();
+        if (first !== null && second !== null && Math.abs(second - first) > 0.01) {
+          start = second;
+          break;
+        }
+        if (first === null) await sleep(300);
+      }
+      if (start === null) {
+        const state = await page.evaluate(`JSON.stringify({
+          gate: !!document.querySelector('[data-testid="play-gate"]'),
+          waiting: !!document.querySelector('[data-testid="waiting-for-players"]'),
+          coarse: window.matchMedia('(pointer: coarse)').matches,
+          hidden: document.hidden,
+          boot: !!document.querySelector('[data-testid="boot-state"]'),
+        })`);
+        throw new Error(`the hosted game never started moving — ${state}`);
+      }
+
+      // Drift's orbit is stable on its own, which is what makes the thrust
+      // measurement mean something rather than measuring the passage of time.
+      await sleep(1400);
+      const idleDrift = Math.abs((await radius()) - start);
+      const before = await radius();
+      await page.hold(KEYS.x, 1400);
+      await sleep(200);
+      const thrustDrift = Math.abs((await radius()) - before);
+
+      if (idleDrift > 12) throw new Error(`the orbit is not stable on its own (${idleDrift.toFixed(0)}px)`);
+      if (thrustDrift < 25) {
+        // A completely static canvas means the game is not running at all,
+        // which is a different failure from input not arriving. Say which.
+        const gate = await page.evaluate(
+          `!!document.querySelector('[data-testid="play-gate"]')`,
+        );
+        const coarse = await page.evaluate(`window.matchMedia('(pointer: coarse)').matches`);
+        throw new Error(
+          `thrust moved the orbit only ${thrustDrift.toFixed(0)}px ` +
+            `(idle drift ${idleDrift.toFixed(0)}px, play gate ${gate}, coarse ${coarse})`,
+        );
+      }
+    });
+
+    await check('a hosted game has no storage of its own', async () => {
+      // The control for the save check below. D-015 makes the host responsible
+      // for save storage; here that is not a policy but a fact of the sandbox,
+      // and it is what makes a save appearing in localStorage proof that it
+      // travelled the bridge rather than being written by the game.
+      const reach = await page.frameEvaluate(`(() => {
+        const out = {};
+        try { void window.localStorage; out.localStorage = 'REACHED'; }
+        catch { out.localStorage = 'denied'; }
+        try { void window.sessionStorage; out.sessionStorage = 'REACHED'; }
+        catch { out.sessionStorage = 'denied'; }
+        // Reading cookies does not return empty in a sandboxed document — it
+        // throws, which is a stronger result than the check first assumed.
+        try { out.cookie = document.cookie === '' ? 'empty' : 'REACHED'; }
+        catch { out.cookie = 'denied'; }
+        out.origin = String(window.origin);
+        return out;
+      })()`);
+      if (reach.localStorage !== 'denied' || reach.sessionStorage !== 'denied') {
+        throw new Error(`the sandbox has storage: ${JSON.stringify(reach)}`);
+      }
+      if (reach.cookie === 'REACHED') throw new Error('the sandbox can read cookies');
+      // An opaque origin is what denies all of the above.
+      if (reach.origin !== 'null') throw new Error(`frame origin was ${reach.origin}`);
+    });
+
+    await check('a hosted game save is persisted by the host', async () => {
+      const SAVE_KEY = 'gbstudio.save.v1.drift-hosted';
+      const saved = () => page.evaluate(`window.localStorage.getItem('${SAVE_KEY}')`);
+
+      await page.goto(`${base}/games/drift-hosted`);
+      // The resolver fetches the manifest, mounts the frame and waits for the
+      // game to boot, so this needs longer than a compiled page would.
+      await sleep(4000);
+      const deadline = Date.now() + 45_000;
+      while (Date.now() < deadline) {
+        if (await saved()) break;
+        await page.hold(KEYS.x, 900);
+        await sleep(600);
+      }
+      if (!(await saved())) throw new Error('played for 45s and nothing was saved');
+
+      // Real bytes, not merely present. The game cannot have written them: the
+      // check above proves it has nowhere to write.
+      const best = await page.evaluate(`(() => {
+        const bytes = Uint8Array.from(atob(window.localStorage.getItem('${SAVE_KEY}')), (c) => c.charCodeAt(0));
+        return { version: bytes[0], best: new DataView(bytes.buffer).getUint32(1, true) };
+      })()`);
+      if (best.version !== 1 || best.best < 1) {
+        throw new Error(`the saved bytes were ${JSON.stringify(best)}`);
+      }
+
+      // And it comes back: a reload restores it into the frame rather than
+      // starting the player over.
+      await page.goto(`${base}/games/drift-hosted`);
+      await sleep(3000);
+      const restored = await page.frameEvaluate(`(() => {
+        const canvas = document.querySelector('canvas');
+        const { data } = canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height);
+        let lit = 0;
+        for (let i = 0; i < data.length; i += 4) if (data[i] > 40) lit += 1;
+        return lit;
+      })()`);
+      if (!(restored > 0)) throw new Error('the game did not come back after a reload');
+      await page.shot('hosted-save');
+    });
+
+    await check('an M4 phone controller drives a hosted game', async () => {
+      if (!relayUp || !openGuest) {
+        throw new Error('the relay is not running, so M4 equivalence cannot be checked');
+      }
+
+      // Every layer at once: phone -> relay -> InputRouter -> frame bridge ->
+      // hosted game, measured inside the sandbox.
+      await page.goto(`${base}/games/ring-out-hosted`);
+      await sleep(3500);
+
+      const opened = await page.evaluate(`(() => {
+        const button = document.querySelector('[data-testid="invite-open"]');
+        if (!button) return false;
+        button.click();
+        return true;
+      })()`);
+      if (!opened) throw new Error('no Invite button on a hosted multiplayer game');
+
+      let code = null;
+      const codeDeadline = Date.now() + 8000;
+      while (Date.now() < codeDeadline) {
+        const seen = await page.evaluate(
+          `document.querySelector('[data-testid="invite-code"]')?.textContent ?? ''`,
+        );
+        if (/^[A-Z0-9]{6}$/.test(seen)) { code = seen; break; }
+        await sleep(200);
+      }
+      if (!code) throw new Error('the hosted game never produced a room code');
+
+      const guest = await openGuest(code);
+      const hex = guest.seat.slot === 0 ? [0x9b, 0xbc, 0x0f] : [0xe0, 0xa3, 0x3e];
+      const FIGHTER = `(() => {
+        const canvas = document.querySelector('canvas');
+        if (!canvas) return null;
+        const { data, width } = canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height);
+        let sx = 0, sy = 0, n = 0;
+        for (let i = 0; i < data.length; i += 4) {
+          if (Math.abs(data[i] - ${hex[0]}) < 40 && Math.abs(data[i + 1] - ${hex[1]}) < 40
+              && Math.abs(data[i + 2] - ${hex[2]}) < 40) {
+            sx += (i / 4) % width; sy += Math.floor((i / 4) / width); n += 1;
+          }
+        }
+        return n === 0 ? null : { x: sx / n, y: sy / n, count: n };
+      })()`;
+
+      let moved = null;
+      for (let attempt = 0; attempt < 5 && !moved; attempt += 1) {
+        const before = await page.frameEvaluate(FIGHTER);
+        if (before?.count) {
+          guest.press('right', true);
+          await sleep(300);
+          guest.press('right', false);
+          await sleep(150);
+          const after = await page.frameEvaluate(FIGHTER);
+          if (after?.count && after.x > before.x + 4) moved = { before, after };
+        }
+        if (!moved) await sleep(1700); // outlast a round change
+      }
+      guest.socket.close();
+      if (!moved) throw new Error('the phone pressed right and nothing moved inside the frame');
+      await page.shot('hosted-phone');
+    });
+
+    await check('changing a hosted game needs no application rebuild', async () => {
+      // THE milestone claim. The application is already built and running; only
+      // the hosted origin changes, and the page is reloaded normally rather
+      // than force-refreshed, because "works on an ordinary reload" is the
+      // claim being made.
+      const { execFileSync } = await import('node:child_process');
+      const label = `swap-${Date.now()}`;
+      const nextBuildBefore = fs.statSync(`${REPO}/.next/BUILD_ID`).mtimeMs;
+
+      execFileSync(
+        'node',
+        [`${REPO}/hosted-games/build.mjs`, '--version', '1.1.0', '--label', label],
+        { cwd: REPO, stdio: 'ignore' },
+      );
+
+      await page.goto(`${base}/games/drift-hosted`);
+      const deadline = Date.now() + 12_000;
+      for (;;) {
+        const src = await frameEval(`frame.getAttribute('src')`);
+        if (typeof src === 'string' && src.includes('/1.1.0/')) break;
+        if (Date.now() > deadline) throw new Error(`frame still points at ${src}`);
+        await sleep(400);
+        await page.goto(`${base}/games/drift-hosted`);
+      }
+
+      const nextBuildAfter = fs.statSync(`${REPO}/.next/BUILD_ID`).mtimeMs;
+      if (nextBuildAfter !== nextBuildBefore) {
+        throw new Error('the application was rebuilt, so this proves nothing');
+      }
+      await page.shot('hosted-swapped');
+    });
+
+    await check('rollback is the same action, not a special case', async () => {
+      const { execFileSync } = await import('node:child_process');
+      execFileSync('node', [`${REPO}/hosted-games/build.mjs`, '--version', '1.0.0'], {
+        cwd: REPO,
+        stdio: 'ignore',
+      });
+      await page.goto(`${base}/games/drift-hosted`);
+      const deadline = Date.now() + 12_000;
+      for (;;) {
+        const src = await frameEval(`frame.getAttribute('src')`);
+        if (typeof src === 'string' && src.includes('/1.0.0/')) break;
+        if (Date.now() > deadline) throw new Error(`frame still points at ${src}`);
+        await sleep(400);
+        await page.goto(`${base}/games/drift-hosted`);
+      }
+    });
+
+    await check('a slug in neither catalog is an honest not-found', async () => {
+      await page.goto(`${base}/games/definitely-not-a-game`);
+      await sleep(2500);
+      const text = await page.evaluate(`document.body.innerText`);
+      if (!/not here/i.test(text)) throw new Error(`page said: ${text.slice(0, 120)}`);
+    });
+  }
+
   console.log('\nHandheld mode:');
 
   await check('a phone-sized touch device gets the touch deck on a retro game', async () => {
@@ -1029,7 +1579,12 @@ try {
     const note = await page.evaluate(
       `document.querySelector('[data-testid="touch-unsupported"]')?.textContent ?? ''`,
     );
-    if (!/two controllers/i.test(note)) throw new Error(`no honest note, saw: ${note}`);
+    // The copy changed when phone controllers made this a way in rather than a
+    // dead end; the assertion is that the page still explains itself, not that
+    // it uses particular words.
+    if (!/second controller|two controllers/i.test(note)) {
+      throw new Error(`no honest note, saw: ${note}`);
+    }
     await page.shot('handheld-ring-out');
   });
 
@@ -1093,12 +1648,21 @@ try {
 
   console.log(
     `\n${passed} browser checks pass` +
-      (skipped ? ` — ${skipped} SKIPPED by GBS_ONLY="${process.env.GBS_ONLY}", not a full run` : ''),
+      (skipped ? ` — ${skipped} SKIPPED by GBS_ONLY="${process.env.GBS_ONLY}", not a full run` : '') +
+      (abandoned
+        ? `\n${abandoned} never ran: the browser stopped responding at "${unresponsiveAt}". NOT a pass.`
+        : ''),
   );
   if (failures.length) {
     console.log('failed:', failures.join(', '));
     process.exitCode = 1;
   }
+} catch (error) {
+  // Setup failures land here — a browser that never answered, a socket that
+  // died. Print the reason rather than a stack trace, because the useful
+  // information is which call gave up, not where in this file it was made.
+  console.log(`\nThe run stopped early: ${String(error?.message ?? error).split('\n')[0]}`);
+  process.exitCode = 1;
 } finally {
   shutdown();
 }

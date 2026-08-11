@@ -3,8 +3,12 @@ import type { ConsoleId } from '@/emulation/core/types';
 /**
  * Which runtime hosts the game. This, not `console`, picks the adapter — a
  * native game has no console at all.
+ *
+ * `hosted` games are the only ones that do not appear in the compiled catalog:
+ * they arrive at runtime through the manifest (D-018), so this union is the one
+ * place the two catalogs meet.
  */
-export type GameRuntime = 'gb' | 'gbc' | 'native';
+export type GameRuntime = 'gb' | 'gbc' | 'native' | 'hosted';
 
 /**
  * The platform input vocabulary, narrowed to the profiles something in the

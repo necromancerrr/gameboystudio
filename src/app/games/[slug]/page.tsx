@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import Image from 'next/image';
 import Link from 'next/link';
-import { notFound } from 'next/navigation';
+import { HostedGameResolver } from '@/components/HostedGameResolver';
 import { GameBoyPlayer } from '@/components/GameBoyPlayer';
 import { NativePlayerMount } from '@/components/NativePlayerMount';
 import {
@@ -54,7 +54,9 @@ export default async function GamePage({
 }) {
   const { slug } = await params;
   const game = getGameBySlug(slug);
-  if (!game) notFound();
+  // Not a 404: a hosted game exists only in the runtime manifest, which the
+  // server has never seen. The client resolves it, or reports a real miss.
+  if (!game) return <HostedGameResolver slug={slug} />;
 
   const extraShots = game.screenshots.slice(1);
   const siblings = getSeriesSiblings(game);

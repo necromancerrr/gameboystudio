@@ -727,6 +727,151 @@ Consequences:
   presence beyond one room, or cloud saves. Those remain postponed, and the
   existence of a Worker is not an argument for any of them.
 
+## D-018: Hosted Games Arrive At Runtime, Not At Build Time
+
+Status: Accepted 2026-08-10 — M5 direction
+
+Decision:
+A hosted game is described by a **runtime-loaded manifest** and executed by a
+**sandboxed iframe** behind a third adapter, beside `BinjgbAdapter` and
+`NativeGameRuntime`. Adding, changing or removing a hosted game must not require
+rebuilding the GameBoyStudio application.
+
+Context:
+The platform already hosts one kind of game as data. A Game Boy title is a ROM —
+an asset, fetched at runtime, interpreted by binjgb — and adding one is a row and
+a file. Native games are the only kind that must be compiled in:
+
+```ts
+export type NativeGameId = 'drift' | 'ring-out';
+```
+
+That union type is the constraint. The catalog cannot grow without shipping the
+site; M4's rooms seat four players while one game uses two and a fifth can only
+arrive through this repository; and nothing outside this repo can be put on the
+platform at all. Creator tools, publishing and AI creation each assume a place to
+put a game that is not our source tree.
+
+Options considered:
+
+1. **A `runtime: 'hosted'` row in the compiled catalog — REJECTED.** This was the
+   first proposal and it fails its own goal. `src/catalog/games.ts` is a
+   TypeScript array compiled into the site, so the bundle would move out of the
+   build while the catalog entry stayed in it: adding a game would still mean a
+   code change, a Next build and a full redeploy. The catalog entry is what
+   decides whether a game exists, so moving only the bundle proves nothing.
+2. **A declarative game format — NOT YET.** D-015 called this the destination and
+   named the two Originals as the research that would earn it. Collecting that
+   research says otherwise: Drift is 503 lines of bespoke orbital gravity,
+   particles, screen shake and hand-drawn vector art, and Ring Out is 482 lines
+   of dash physics, restitution and round phases. A format able to express either
+   would be a general-purpose engine; one that merely expressed both would
+   generalise to nothing. More games and more genres must exist first — and they
+   cannot while a game can only arrive by site deploy. The format now waits on
+   this milestone rather than the reverse.
+3. **Runtime-loaded manifest plus sandboxed frame — CHOSEN.** The smallest
+   boundary that makes the goal true rather than nearly true.
+
+Reason:
+This removes a constraint rather than adding a feature. It is also the substrate
+every later rung needs: creator tools publish something and AI generates
+something, and both need somewhere to put it. Building an editor before this
+boundary would be building the road before the ground.
+
+Consequences:
+- **The manifest carries only platform-controlled metadata, capabilities and a
+  URL.** Never code, never markup, never anything a browser executes directly. It
+  is validated before reaching the catalog or the player: strict schema, bounded
+  sizes, `frameUrl` origin allowlisted, slug collisions with compiled games
+  rejected, and one bad entry dropped rather than poisoning the document.
+- **The compiled catalog renders first and never waits on the manifest.** The
+  Instant Contract is binding, so a slow or dead hosted origin must not delay or
+  break games that are already there. A failed manifest is a no-op.
+- **`sandbox="allow-scripts"` without `allow-same-origin`** gives the frame an
+  opaque origin, so it cannot reach our DOM, cookies or `localStorage`. No second
+  application domain is needed for isolation.
+- **Saves flow through the host**, because the sandbox has no usable storage.
+  D-015 already made the host responsible for save storage, so the constraint and
+  the design agree.
+- **Input is unchanged.** `InputRouter` already merges keyboard, gamepad, touch
+  and remote; the bridge is one more consumer, so an M4 phone controller drives a
+  hosted game without new work.
+- Hosted games keep `/games/[slug]` URLs. A separate URL shape would leak the
+  runtime to players, which D-014 forbids. The server cannot know a hosted game
+  exists, so an unknown slug renders a client resolver.
+- Accepted trade: a hosted game's page metadata is generic, because metadata is
+  generated at build time and the game is not known then.
+- The retro and native catalogs are **not** migrated. Only hosted games use the
+  manifest.
+- The frame protocol's verbs are limited to what the player component already
+  calls. A new verb requires a real game that needs it, or this becomes an engine
+  by accretion.
+
+Verification:
+The milestone's goal is a test rather than a claim: with the application already
+built and running, change the hosted artifact, redeploy only the hosted origin,
+reload without a Next build, and see the change. Isolation is demonstrated by
+attempting `parent.document`, `parent.localStorage` and `document.cookie` from
+inside the frame and requiring each to be denied — a boundary nobody tried to
+cross is not a boundary. Equivalence is checked by hosting Ring Out and Drift,
+which between them cover the whole adapter surface, and requiring the existing
+browser checks to pass unchanged. No new game content is written.
+
+## D-019: The Hosted Origin
+
+Status: Accepted 2026-08-10
+
+Decision:
+Hosted games and their manifest are served from a **static origin deployed
+separately from the application**, and its contents remain curated by us.
+
+Context:
+D-017 committed the project's first backend on the promise that it stays
+ephemeral, payload-blind and impossible to grow into a social backend. The hosted
+origin is a second, different commitment and deserves its own entry rather than
+being folded into the relay: the relay carries no payloads and stores nothing,
+while this origin exists precisely to store and serve files.
+
+Reason:
+The application is deployed by Vercel, where `public/` is part of the build, so
+anything served from it requires a rebuild — the exact constraint M5 exists to
+remove. A separate static origin is therefore not a preference but the
+requirement itself.
+
+Consequences:
+- **Curation is unchanged.** We decide what is on that origin, exactly as with
+  ROMs under D-008, including the same licence and attribution discipline. M5
+  does not let strangers put games on the site; it makes that possible later.
+- The relay is not reused for this. Serving game files from it would contradict
+  the promise D-017 was accepted on.
+- A hosted game's files are built by their own build step, with their own entry
+  point and output directory, and deployed by their own command. `next build`
+  does not produce them and deleting `.next` does not affect them.
+- The origin is on the allowlist the manifest validator checks, so a manifest
+  cannot point the player's browser at an arbitrary third-party frame.
+- **Artifacts are immutable and versioned; the manifest is the only mutable
+  document.** A game's files live under a version in their path and are served
+  `Cache-Control: public, max-age=31536000, immutable`, never overwritten. The
+  manifest is served `Cache-Control: no-cache` — revalidate every time, not "do
+  not store" — so an unchanged one costs a 304.
+
+  This is what keeps the milestone's proof unambiguous. An update that appeared
+  "eventually", or only after a hard refresh, would make the result depend on
+  browser cache timing rather than on the boundary working. Because the manifest
+  names a specific version, publishing is "add an artifact, repoint the
+  manifest", rollback is "repoint the manifest back", and the two are the same
+  action rather than one being a special case. The iframe URL carries the
+  version, so a new version cannot be served from a stale document.
+
+  Deliberately **not** a package registry: no resolution, no version ranges, no
+  dependency graph, no publish API. A version is a path segment and the manifest
+  is a pointer.
+- Deployment gains a third target: the site, the relay, and this.
+- Open, and deliberately not solved in M5: the manifest is fetched over the
+  network and is trusted because it comes from an allowlisted origin over HTTPS.
+  Signing or content hashing would harden that. It is not built yet because we
+  are the only publisher; it must be revisited before anyone else is.
+
 ## Template For Future Decisions
 
 ### D-XXX: Decision Name

@@ -7,9 +7,15 @@ export { GAMES };
 export type { Game, GameRuntime, InputProfile, RetroGame };
 export { CONSOLE_LABELS } from './types';
 
-/** True for anything the emulator hosts, i.e. everything that is not native. */
+/**
+ * True for anything the emulator hosts.
+ *
+ * Written as a positive test rather than "not native". With only two runtimes
+ * the negative form was equivalent; once `hosted` existed it would silently
+ * have classified hosted games as Game Boy ROMs and handed them to binjgb.
+ */
 export function isRetro(game: Game): game is RetroGame {
-  return game.runtime !== 'native';
+  return game.runtime === 'gb' || game.runtime === 'gbc';
 }
 
 /** A verified gameplay loop. Only games that earned one appear here. */

@@ -1,0 +1,25 @@
+name = "gameboystudio-hosted"
+main = "src/index.ts"
+compatibility_date = "2026-08-01"
+
+# A static file origin, deployed separately from the application (D-019).
+# Deliberately not the relay: D-017 accepted that Worker on the promise it stays
+# payload-blind and stores nothing.
+#
+# There is no KV, no D1 and no queue here. Files in public/ are the whole state,
+# and cache policy in src/index.ts is the whole logic.
+
+[assets]
+directory = "public"
+binding = "ASSETS"
+not_found_handling = "404-page"
+# Serve exact paths only. The default rewrites `/x/frame.html` to `/x/frame`
+# with a 307, which would break the versioned frame URLs the manifest points at.
+html_handling = "none"
+# Without this the asset server answers first and the Worker never runs, so the
+# cache policy below — the thing the milestone's proof depends on — would be
+# Cloudflare's defaults rather than ours.
+run_worker_first = true
+
+[observability]
+enabled = true

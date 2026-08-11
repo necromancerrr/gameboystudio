@@ -31,5 +31,5 @@
     "**/*.mts"
   ],
   "//": "worker/ is the room relay (D-017). It runs on Cloudflare Workers, not in a browser, so it has its own tsconfig with Workers globals instead of the DOM lib.",
-  "exclude": ["node_modules", "worker"]
+  "exclude": ["node_modules", "worker", "hosted-origin"]
 }

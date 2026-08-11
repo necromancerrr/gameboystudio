@@ -1,0 +1,22 @@
+{
+  "//": "Shape reference only. The real manifest.json is produced by `npm run hosted:build --origin <hosted origin>` and is deliberately not committed: it names an origin, and a committed one would eventually be the wrong one.",
+  "version": 1,
+  "games": [
+    {
+      "slug": "example-game",
+      "title": "Example Game",
+      "developer": "Someone",
+      "description": "What a player would want to know before pressing play.",
+      "year": 2026,
+      "players": { "min": 1, "max": 2 },
+      "inputs": { "required": [], "supported": ["gamepad", "keyboard", "touch"] },
+      "saves": true,
+      "genre": ["Action"],
+      "screenshots": [],
+      "license": "MIT",
+      "attribution": "Someone",
+      "sourceUrl": "https://example.com/source",
+      "frameUrl": "https://hosted.example/games/example-game/1.0.0/frame.html"
+    }
+  ]
+}

@@ -1,0 +1,16 @@
+{
+  "//": "The hosted origin runs on Cloudflare Workers, not in a browser. It shares nothing with the app — it only moves bytes.",
+  "compilerOptions": {
+    "target": "es2022",
+    "lib": ["es2022"],
+    "module": "es2022",
+    "moduleResolution": "bundler",
+    "types": ["@cloudflare/workers-types"],
+    "strict": true,
+    "skipLibCheck": true,
+    "noEmit": true,
+    "isolatedModules": true,
+    "esModuleInterop": true
+  },
+  "include": ["src/**/*.ts"]
+}

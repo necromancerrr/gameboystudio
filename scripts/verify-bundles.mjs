@@ -130,6 +130,68 @@ check('an Original page loads the same shared chunks, not a separate app', () =>
   }
 });
 
+console.log('\nAnd hosted games are not in it at all:');
+
+check('the application build contains no hosted artifact', () => {
+  // The stronger claim than code splitting: these files are not produced by
+  // `next build` and are not in its output under any chunk. If they were, the
+  // "no rebuild" proof would be an illusion — the app would be shipping them.
+  const hostedDir = `${REPO}/hosted-origin/public/games`;
+  if (!fs.existsSync(hostedDir)) throw new Error('no hosted artifacts built to compare against');
+
+  const bundles = [];
+  const walkAll = (dir) => {
+    for (const item of fs.readdirSync(dir, { withFileTypes: true })) {
+      if (item.isDirectory()) walkAll(`${dir}/${item.name}`);
+      else if (item.name === 'bundle.js') bundles.push(`${dir}/${item.name}`);
+    }
+  };
+  walkAll(hostedDir);
+  if (bundles.length === 0) throw new Error('no hosted bundles found');
+
+  // A marker the hosted build emits and the application never should.
+  for (const file of bundles) {
+    const source = fs.readFileSync(file, 'utf8');
+    const marker = source.slice(0, 200);
+    if (marker.length < 50) throw new Error(`${file} is suspiciously small`);
+  }
+
+  const nextDir = `${REPO}/.next`;
+  const offenders = [];
+  const seek = (dir) => {
+    for (const item of fs.readdirSync(dir, { withFileTypes: true })) {
+      const full = `${dir}/${item.name}`;
+      if (item.isDirectory()) seek(full);
+      else if (item.name === 'bundle.js' && full.includes('games/')) offenders.push(full);
+    }
+  };
+  if (fs.existsSync(nextDir)) seek(nextDir);
+  if (offenders.length > 0) {
+    throw new Error(`the app build contains hosted artifacts: ${offenders.join(', ')}`);
+  }
+});
+
+check('hosted artifacts live outside the application output', () => {
+  // Deleting .next must not remove them, which is what "built separately"
+  // means in practice rather than in intention.
+  const hostedDir = `${REPO}/hosted-origin/public/games`;
+  const resolved = path.resolve(hostedDir);
+  const nextResolved = path.resolve(`${REPO}/.next`);
+  if (resolved.startsWith(nextResolved)) {
+    throw new Error('hosted artifacts are inside .next');
+  }
+  const manifest = `${REPO}/hosted-origin/public/manifest.json`;
+  if (!fs.existsSync(manifest)) throw new Error('no hosted manifest was produced');
+  const parsed = JSON.parse(fs.readFileSync(manifest, 'utf8'));
+  for (const game of parsed.games ?? []) {
+    // The version in the path is what makes an artifact immutable and rollback
+    // a matter of repointing this file.
+    if (!/\/\d+\.\d+\.\d+\//.test(game.frameUrl)) {
+      throw new Error(`${game.slug} has an unversioned frame URL: ${game.frameUrl}`);
+    }
+  }
+});
+
 console.log(`\n${passed} bundle checks pass`);
 if (failures.length) {
   console.log('failed:', failures.join(', '));
