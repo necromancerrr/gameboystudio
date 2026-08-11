@@ -259,6 +259,29 @@ export function runHostedGame(game: HostedGameDefinition): void {
     if (message) void apply(message);
   });
 
-  // Unprompted: the host is waiting for this and gives up if it never arrives.
-  send({ t: 'hello', v: FRAME_PROTOCOL_VERSION, width: game.width, height: game.height });
+  /**
+   * Announce, and keep announcing until the host answers.
+   *
+   * The iframe's `src` is set during render, so the document can finish loading
+   * before the host has attached its message listener. A single unprompted
+   * hello is then lost forever: the game sits waiting for `load` that never
+   * comes, having already created its canvas, so it looks like a game that
+   * started and ignores input rather than one that never started.
+   *
+   * Retrying is the fix rather than reordering the host, because the race can
+   * fall either way and only one side can be made to not care.
+   */
+  const hello = () =>
+    send({ t: 'hello', v: FRAME_PROTOCOL_VERSION, width: game.width, height: game.height });
+
+  hello();
+  const announcing = setInterval(() => {
+    if (loaded) {
+      clearInterval(announcing);
+      return;
+    }
+    hello();
+  }, 250);
+  // Nothing is listening, or the host refused this version. Stop talking to it.
+  setTimeout(() => clearInterval(announcing), 15_000);
 }

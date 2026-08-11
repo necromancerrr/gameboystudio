@@ -116,6 +116,11 @@ class Session {
     // a later check read a dead frame's canvas and see a game that never moves,
     // which looks exactly like input not working.
     this.frameSessions = [];
+    // A backgrounded page throttles requestAnimationFrame to nothing, so every
+    // check that watches something move would fail for a reason that has
+    // nothing to do with the code under test. Cheap, and it makes "the screen
+    // never changed" mean what it says.
+    await this.send('Page.bringToFront').catch(() => {});
     await this.send('Page.navigate', { url });
     // The pages are static; a short settle beats parsing lifecycle events.
     await sleep(900);

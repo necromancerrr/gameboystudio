@@ -110,6 +110,34 @@ await check('start before hello is not lost', async () => {
   assert.deepEqual(verbs(session.received), ['load', 'start']);
 });
 
+await check('a hello sent before the host is listening is not lost', async () => {
+  // The iframe's src is set during render, so the document can finish loading
+  // before the host attaches its listener. A guest that announced itself once
+  // would sit waiting for a load that never comes — canvas created, nothing
+  // running — which looks exactly like a game that ignores input.
+  const [hostSide, frameSide] = LoopbackPort.pair();
+  const received = [];
+  frameSide.onMessage((message) => received.push(message));
+
+  // The guest speaks into the void, the way a frame that loaded early does.
+  frameSide.post({ t: 'hello', v: FRAME_PROTOCOL_VERSION, width: 320, height: 288 });
+  await settle();
+
+  const adapter = new HostedGameAdapter({
+    port: hostSide,
+    players: 1,
+    onError: () => {},
+  });
+  await settle();
+  assert.deepEqual(verbs(received), [], 'the first hello was missed, as expected');
+
+  // The SDK keeps announcing, so the next one lands.
+  frameSide.post({ t: 'hello', v: FRAME_PROTOCOL_VERSION, width: 320, height: 288 });
+  await settle();
+  assert.deepEqual(verbs(received), ['load'], 'a repeated hello must be answered');
+  adapter.destroy();
+});
+
 console.log('\nLifecycle:');
 
 async function ready(options) {
