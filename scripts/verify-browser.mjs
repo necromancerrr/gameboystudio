@@ -252,6 +252,10 @@ class Session {
   }
 
   async shot(name) {
+    // Screenshots are diagnostics, never assertions, so they can be dropped
+    // when the machine is short of memory — which is exactly when
+    // Page.captureScreenshot is the call most likely not to answer.
+    if (process.env.GBS_NO_SHOTS) return;
     const { data } = await this.send('Page.captureScreenshot', { format: 'png' });
     fs.mkdirSync(SHOT_DIR, { recursive: true });
     fs.writeFileSync(`${SHOT_DIR}/${name}.png`, Buffer.from(data, 'base64'));
