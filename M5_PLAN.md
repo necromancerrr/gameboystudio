@@ -149,6 +149,48 @@ Three things fall out well:
   touch and remote; the bridge is one more consumer. A phone controller joined
   through an M4 room drives a hosted game for free.
 
+## Caching, so the proof is never ambiguous
+
+An update that becomes visible "eventually", or only after a hard refresh, would
+make the core proof depend on browser luck rather than on the boundary working.
+So caching is a deliberate part of the design.
+
+**Hosted artifacts are immutable and versioned.** A game's files live under a
+version in their path:
+
+```
+/games/ring-out/1.0.0/frame.html
+/games/ring-out/1.0.0/bundle.js
+```
+
+They are served `Cache-Control: public, max-age=31536000, immutable` and are
+never overwritten. Publishing a change means publishing a *new* version
+alongside the old one.
+
+**The manifest is the only mutable document, and it is always revalidated.** It
+is served `Cache-Control: no-cache`, which means revalidate every time rather
+than do not store — with an ETag, an unchanged manifest costs a 304 and nothing
+else.
+
+Because the manifest names a specific version, this is the whole update
+mechanism:
+
+```
+publish artifact 1.1.0   ->   point the manifest at 1.1.0   ->   players get it
+rollback                 ->   point the manifest back at 1.0.0
+```
+
+The application is not rebuilt in either direction, and a rollback is the same
+action as an update rather than a special case. The iframe URL changes with the
+version, so a new version cannot be served from a stale document.
+
+This is deliberately **not** a package registry: no resolution, no ranges, no
+dependency graph, no publish API. A version is a path segment, and the manifest
+is a pointer.
+
+The verification does not clear caches or force-reload. It reloads the page
+normally, because "works on an ordinary reload" is the claim being made.
+
 ## What "genuinely independent" means here
 
 The hosted artifact must not be another chunk emitted by Next. Concretely:
@@ -261,14 +303,17 @@ possible later.
 1. A hosted game is built by its own build, deployed to its own origin, and
    plays inside GameBoyStudio.
 2. Changing that game and redeploying only the hosted origin changes what
-   players get, with **no application rebuild**, demonstrated in the harness.
-3. Keyboard, gamepad, touch and an M4 phone controller all reach a hosted game
+   players get, with **no application rebuild** and **on an ordinary reload**,
+   demonstrated in the harness.
+3. Pointing the manifest back at the previous version rolls the change back,
+   by the same mechanism rather than a special one.
+4. Keyboard, gamepad, touch and an M4 phone controller all reach a hosted game
    through `InputRouter`.
-4. Saves for a hosted game persist through the host.
-5. Pause, reset, mute and fullscreen work.
-6. The sandboxed game is shown to be unable to reach parent DOM, storage or
+5. Saves for a hosted game persist through the host.
+6. Pause, reset, mute and fullscreen work.
+7. The sandboxed game is shown to be unable to reach parent DOM, storage or
    cookies.
-7. A missing, slow, empty or malformed manifest leaves the site behaving exactly
+8. A missing, slow, empty or malformed manifest leaves the site behaving exactly
    as it does today.
-8. `npm run verify` passes, including new checks that fail when deliberately
+9. `npm run verify` passes, including new checks that fail when deliberately
    broken.

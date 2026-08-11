@@ -849,6 +849,23 @@ Consequences:
   does not produce them and deleting `.next` does not affect them.
 - The origin is on the allowlist the manifest validator checks, so a manifest
   cannot point the player's browser at an arbitrary third-party frame.
+- **Artifacts are immutable and versioned; the manifest is the only mutable
+  document.** A game's files live under a version in their path and are served
+  `Cache-Control: public, max-age=31536000, immutable`, never overwritten. The
+  manifest is served `Cache-Control: no-cache` — revalidate every time, not "do
+  not store" — so an unchanged one costs a 304.
+
+  This is what keeps the milestone's proof unambiguous. An update that appeared
+  "eventually", or only after a hard refresh, would make the result depend on
+  browser cache timing rather than on the boundary working. Because the manifest
+  names a specific version, publishing is "add an artifact, repoint the
+  manifest", rollback is "repoint the manifest back", and the two are the same
+  action rather than one being a special case. The iframe URL carries the
+  version, so a new version cannot be served from a stale document.
+
+  Deliberately **not** a package registry: no resolution, no version ranges, no
+  dependency graph, no publish API. A version is a path segment and the manifest
+  is a pointer.
 - Deployment gains a third target: the site, the relay, and this.
 - Open, and deliberately not solved in M5: the manifest is fetched over the
   network and is trusted because it comes from an allowlisted origin over HTTPS.

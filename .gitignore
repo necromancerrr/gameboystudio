@@ -51,6 +51,7 @@ next-env.d.ts
 
 # wrangler's local state for the room relay
 /worker/.wrangler/
+/hosted-origin/.wrangler/
 /.wrangler/
 
 # browser verification screenshots (review artifacts)
