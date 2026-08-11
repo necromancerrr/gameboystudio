@@ -47,6 +47,36 @@ if (!chrome) {
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
+/** No DevTools command in this suite legitimately takes this long. */
+const CDP_TIMEOUT_MS = Number(process.env.GBS_CDP_TIMEOUT ?? 30_000);
+/**
+ * A ceiling per check. The slowest legitimate ones fly Drift for 45 seconds,
+ * so this is generous — it exists to end a wedged check, not to police speed.
+ */
+const CHECK_TIMEOUT_MS = Number(process.env.GBS_CHECK_TIMEOUT ?? 180_000);
+
+/**
+ * Commands that can be sent twice without changing the outcome. Deliberately
+ * excludes Runtime.evaluate and every Input command: some of those click
+ * things, and a retried click is a different test.
+ */
+/**
+ * How many DevTools calls may time out in a row before the run gives up.
+ *
+ * Once the browser stops answering it does not come back, and grinding through
+ * thirty more checks at thirty seconds each produces a wall of failures that
+ * hides which one actually broke. Stopping names the check that lost it.
+ */
+const UNRESPONSIVE_LIMIT = 3;
+
+const RETRYABLE_CDP = new Set([
+  'Page.navigate',
+  'Page.bringToFront',
+  'Page.getFrameTree',
+  'Page.captureScreenshot',
+  'Page.createIsolatedWorld',
+]);
+
 async function waitForPort(port, timeoutMs = 30_000) {
   const deadline = Date.now() + timeoutMs;
   for (;;) {
@@ -70,11 +100,20 @@ class Session {
     this.events = [];
     /** Sessions attached to out-of-process frames, newest last. */
     this.frameSessions = [];
+    /** Set once the browser has stopped answering; the run then gives up. */
+    this.dead = false;
+    this.consecutiveTimeouts = 0;
     socket.addEventListener('message', (message) => {
       const data = JSON.parse(message.data);
-      if (data.id && this.pending.has(data.id)) {
-        const { resolve, reject } = this.pending.get(data.id);
-        this.pending.delete(data.id);
+      // Keyed by session as well as id: with flattened auto-attach, every
+      // attached frame has its own id space on this one socket, so matching on
+      // id alone lets a frame's reply resolve a page request. The real request
+      // then stays pending forever — a hang with the process idle, which is
+      // exactly how this showed up.
+      const key = `${data.sessionId ?? ''}:${data.id}`;
+      if (data.id && this.pending.has(key)) {
+        const { resolve, reject } = this.pending.get(key);
+        this.pending.delete(key);
         if (data.error) reject(new Error(data.error.message));
         else resolve(data.result);
       } else if (data.method) {
@@ -91,10 +130,57 @@ class Session {
     });
   }
 
-  send(method, params = {}, sessionId) {
+  /**
+   * Sends a command and refuses to wait forever for the answer.
+   *
+   * An unanswered CDP call used to leave the suite idle with no output, which
+   * is indistinguishable from a slow check and impossible to diagnose after the
+   * fact. Now it fails, names the method, and the run continues to the next
+   * check — a bounded failure beats an unbounded wait.
+   */
+  /**
+   * Retried once, and only for commands that are safe to repeat.
+   *
+   * A busy browser occasionally misses a command; repeating a navigation or a
+   * screenshot costs nothing. Repeating `Runtime.evaluate` or an input event
+   * would not be safe — some of those click buttons — so those fail on the
+   * first timeout and say so.
+   */
+  async send(method, params = {}, sessionId, timeoutMs = CDP_TIMEOUT_MS) {
+    const retryable = RETRYABLE_CDP.has(method);
+    try {
+      return await this.sendOnce(method, params, sessionId, timeoutMs);
+    } catch (error) {
+      if (!retryable) throw error;
+      console.log(`       (retrying ${method} after: ${error.message})`);
+      return this.sendOnce(method, params, sessionId, timeoutMs);
+    }
+  }
+
+  sendOnce(method, params = {}, sessionId, timeoutMs = CDP_TIMEOUT_MS) {
+    if (this.dead) {
+      return Promise.reject(new Error('the browser stopped responding earlier in this run'));
+    }
     const id = this.nextId++;
+    const key = `${sessionId ?? ''}:${id}`;
     return new Promise((resolve, reject) => {
-      this.pending.set(id, { resolve, reject });
+      const timer = setTimeout(() => {
+        this.pending.delete(key);
+        this.consecutiveTimeouts += 1;
+        if (this.consecutiveTimeouts >= UNRESPONSIVE_LIMIT) this.dead = true;
+        reject(new Error(`CDP ${method} did not answer within ${timeoutMs}ms`));
+      }, timeoutMs);
+      this.pending.set(key, {
+        resolve: (value) => {
+          clearTimeout(timer);
+          this.consecutiveTimeouts = 0;
+          resolve(value);
+        },
+        reject: (error) => {
+          clearTimeout(timer);
+          reject(error);
+        },
+      });
       this.socket.send(JSON.stringify({ id, method, params, ...(sessionId ? { sessionId } : {}) }));
     });
   }
@@ -266,6 +352,7 @@ async function movesWhen({ press, read, other, expect, attempts = 4 }) {
 
 let passed = 0;
 let skipped = 0;
+let abandoned = 0;
 const failures = [];
 
 /**
@@ -279,18 +366,46 @@ const ONLY = (process.env.GBS_ONLY ?? '')
   .map((term) => term.trim())
   .filter(Boolean);
 
+/** Set when the browser stopped answering, so the rest of the run is abandoned. */
+let unresponsiveAt = null;
+/** Assigned once the debugger connects; `check` reads it to notice a dead browser. */
+let page = null;
+
 async function check(name, body) {
   if (ONLY.length > 0 && !ONLY.some((term) => name.toLowerCase().includes(term))) {
     skipped += 1;
     return;
   }
+  if (unresponsiveAt) {
+    // Not counted as skipped-by-filter: these were never given a chance.
+    abandoned += 1;
+    return;
+  }
+  let guard;
   try {
-    await body();
+    // Raced rather than awaited: a check that wedges must name itself and let
+    // the suite carry on, instead of leaving a silent process behind.
+    await Promise.race([
+      body(),
+      new Promise((_, reject) => {
+        guard = setTimeout(
+          () => reject(new Error(`the check itself wedged after ${CHECK_TIMEOUT_MS}ms`)),
+          CHECK_TIMEOUT_MS,
+        );
+      }),
+    ]);
     console.log(`  ok   ${name}`);
     passed += 1;
   } catch (error) {
     console.log(`  FAIL ${name}\n       ${String(error.message).split('\n')[0]}`);
     failures.push(name);
+    if (page?.dead) {
+      unresponsiveAt = name;
+      console.log('\n  The browser stopped responding. Abandoning the rest of the run —');
+      console.log('  it does not recover, and thirty more timeouts would bury the cause.');
+    }
+  } finally {
+    clearTimeout(guard);
   }
 }
 
@@ -300,11 +415,26 @@ async function check(name, body) {
  * server-side, so the library checks pass and every check that needs client
  * JavaScript fails — an hour of debugging the wrong thing. Refuse to start.
  */
-const portBusy = await new Promise((resolve) => {
-  const socket = net.connect(PORT, '127.0.0.1');
-  socket.on('connect', () => { socket.end(); resolve(true); });
-  socket.on('error', () => resolve(false));
-});
+const busy = (port) =>
+  new Promise((resolve) => {
+    const socket = net.connect(port, '127.0.0.1');
+    socket.on('connect', () => { socket.end(); resolve(true); });
+    socket.on('error', () => resolve(false));
+  });
+
+/**
+ * A second harness already running is the quiet killer here: two Chromes
+ * compete, checks time out for reasons unrelated to the code, and the results
+ * of both runs are worthless. Refuse rather than add to the pile.
+ */
+if (await busy(DEBUG_PORT)) {
+  console.log(`Something is already using the debug port ${DEBUG_PORT}.`);
+  console.log('Another verify-browser run is probably still going. Stop it first —');
+  console.log('two of these at once make both sets of results meaningless.');
+  process.exit(1);
+}
+
+const portBusy = await busy(PORT);
 if (portBusy) {
   console.log(`Something is already listening on ${PORT}. Stop it first — a stale`);
   console.log('server serves an old build and turns these checks into nonsense.');
@@ -326,6 +456,11 @@ const browser = spawn(
     '--no-sandbox',
     '--disable-gpu',
     '--hide-scrollbars',
+    // Deliberately no throttling or shared-memory flags here. Adding the usual
+    // CI set (--disable-dev-shm-usage, --disable-renderer-backgrounding and
+    // friends) was tried and made this measurably worse — the browser wedged
+    // early and never recovered, taking a run from four failures to thirty.
+    // Page.bringToFront is what keeps animation checks on a visible page.
     '--window-size=1280,900',
     '--autoplay-policy=no-user-gesture-required',
     'about:blank',
@@ -361,7 +496,7 @@ try {
     socket.addEventListener('open', resolve);
     socket.addEventListener('error', reject);
   });
-  const page = new Session(socket);
+  page = new Session(socket);
   await page.send('Page.enable');
   await page.send('Runtime.enable');
   // Sandboxed frames run out-of-process, so reaching them needs an attached
@@ -1114,9 +1249,6 @@ try {
      * collecting a core, which cannot happen without thrust, so a save arriving
      * is input having crossed.
      */
-    const SAVE_KEY = 'gbstudio.save.v1.drift-hosted';
-    const savedBytes = () => page.evaluate(`window.localStorage.getItem('${SAVE_KEY}')`);
-
     await check('the harness can see inside the frame, so input can be measured', async () => {
       // Not a product claim — a harness capability. Without it the only proof
       // of input would be the slow save path, and the direct check below could
@@ -1512,12 +1644,21 @@ try {
 
   console.log(
     `\n${passed} browser checks pass` +
-      (skipped ? ` — ${skipped} SKIPPED by GBS_ONLY="${process.env.GBS_ONLY}", not a full run` : ''),
+      (skipped ? ` — ${skipped} SKIPPED by GBS_ONLY="${process.env.GBS_ONLY}", not a full run` : '') +
+      (abandoned
+        ? `\n${abandoned} never ran: the browser stopped responding at "${unresponsiveAt}". NOT a pass.`
+        : ''),
   );
   if (failures.length) {
     console.log('failed:', failures.join(', '));
     process.exitCode = 1;
   }
+} catch (error) {
+  // Setup failures land here — a browser that never answered, a socket that
+  // died. Print the reason rather than a stack trace, because the useful
+  // information is which call gave up, not where in this file it was made.
+  console.log(`\nThe run stopped early: ${String(error?.message ?? error).split('\n')[0]}`);
+  process.exitCode = 1;
 } finally {
   shutdown();
 }
