@@ -121,4 +121,32 @@ await check('the button vocabulary matches the application', async () => {
   assert.match(bridge, /GbsButton/, 'the app no longer checks its buttons against the SDK');
 });
 
+console.log('\nA fresh clone can build:');
+
+await check('the application build compiles the SDK first', () => {
+  // The SDK's dist is build output and deliberately not committed. That makes
+  // it absent in a fresh clone — which is what a deploy is — so the app's build
+  // has to produce it. Without this, every Vercel build failed with "Can't
+  // resolve @gameboystudio/sdk" while every local build passed, because dist
+  // happened to be lying around from earlier work.
+  const scripts = JSON.parse(fs.readFileSync(path.join(REPO, 'package.json'), 'utf8')).scripts;
+  assert.ok(scripts.prebuild, 'there is no prebuild step');
+  assert.match(
+    scripts.prebuild,
+    /sdk:build|packages\/sdk/,
+    `prebuild does not build the SDK: ${scripts.prebuild}`,
+  );
+  assert.match(scripts['sdk:build'] ?? '', /packages\/sdk/, 'sdk:build does not build the SDK');
+});
+
+await check('the SDK dist is not committed', () => {
+  // If it ever is, the check above stops meaning anything: the build would
+  // succeed on stale committed output and nobody would notice the break.
+  const tracked = execFileSync('git', ['ls-files', 'packages/sdk/dist'], {
+    cwd: REPO,
+    encoding: 'utf8',
+  }).trim();
+  assert.equal(tracked, '', `dist is committed:\n${tracked}`);
+});
+
 reporter.finish('SDK checks');
