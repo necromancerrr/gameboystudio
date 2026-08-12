@@ -13,7 +13,7 @@
  */
 
 import type { NativeGame, InputSnapshot, PlayerInput, AudioHost } from '@/native/types';
-import type { HostedGameContext, HostedGameDefinition, HostedInput } from '@/hosted/sdk';
+import type { HostedGameContext, HostedGameDefinition, HostedInput } from '@gameboystudio/sdk';
 
 /** Bridges the hosted input shape to the one native games read. */
 function snapshotFor(input: HostedInput, players: number): InputSnapshot {

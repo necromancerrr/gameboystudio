@@ -872,6 +872,129 @@ Consequences:
   Signing or content hashing would harden that. It is not built yet because we
   are the only publisher; it must be revisited before anyone else is.
 
+## D-020: The SDK Is The Authoring Boundary
+
+Status: Accepted 2026-08-11 — M6 direction
+
+Decision:
+Games are authored against a **self-contained SDK package**, distributed as a
+versioned tarball. A game's build must not reach into the application source.
+
+Context:
+M5 made a game able to exist without the application's build. It did not make
+one able to exist without the application's repository. A hosted game today
+imports `@/hosted/sdk`, which resolves only because the hosted build sets an
+alias into `src/`, and the SDK itself takes `LogicalButton` from
+`@/emulation/core/types`. Publishing means holding this checkout and Cloudflare
+credentials.
+
+That is the wall between M5 and anything creator- or AI-shaped, and it is also
+the AI question one milestone early: a generator is exactly a creator who has
+never seen the repository.
+
+Options considered:
+
+1. **In-repo package consumed by relative path.** Smallest change and proves
+   nothing — a relative path is the alias problem with different syntax, and the
+   proof would still be a build inside this repository.
+2. **Publish to npm.** The eventual answer, but it commits to a public name and
+   a versioning policy before either has been thought about, and it is a public
+   act that cannot be quietly undone.
+3. **A versioned tarball — CHOSEN.** Installed with `npm install ./gbs-sdk-x.y.z.tgz`,
+   which copies rather than links. It is a real distribution boundary — the
+   proof project has no path back to this repository — without committing to a
+   public name yet.
+
+Reason:
+The tarball is the smallest thing that makes the proof falsifiable. A relative
+import or a workspace link would leave the application source reachable, and a
+build that still works because something is reachable is not evidence.
+
+Consequences:
+- The SDK owns the frame protocol and its own button vocabulary. The application
+  imports the package rather than the reverse, so there is one definition and
+  no drift between host and guest.
+- The proof game lives in a **separate project outside this repository**: SDK
+  installed from the tarball, no `@/` aliases, no imports from `src/`, no
+  workspace resolution, no symlinks back. After installation its build must not
+  touch the application source at all.
+- The SDK ships a **preview host** — a minimal page implementing the host side
+  of the protocol — so a creator can play their game with nothing but the SDK.
+  It is explicitly not the full player: no library, no rooms, no `InputRouter`.
+  A preview that pretended otherwise would send people to publish games that
+  behave differently in the product.
+- Public naming, versioning policy and npm publication are deliberately deferred.
+- Curation is unchanged. This makes a game *makeable* by someone else; it does
+  not make it *publishable* by them. There is no upload path, so there is
+  nothing to moderate.
+
+## D-021: Protocol Versions Are A Compatibility Contract
+
+Status: Accepted 2026-08-11
+
+Decision:
+The host supports the **current frame protocol version and the previous
+supported one**. A bundle outside that range is refused **before play**, with a
+reason, rather than failing during it.
+
+Context:
+While every hosted game was built from this repository, a protocol change was a
+refactor: change both sides, redeploy, done. The moment a game exists that we
+did not build, that stops being true. Its author does not control our deploys,
+so a protocol change we ship is a game of theirs that breaks.
+
+Reason:
+Supporting exactly one version makes every protocol change a flag day for
+everyone else's work. Supporting all versions forever makes the protocol
+un-evolvable. Two is the smallest window that gives an author a real chance to
+rebuild between our releases.
+
+Consequences:
+- `hello` already carries the version, so the host can refuse at handshake —
+  the check exists and this decision is about what it does.
+- The SDK version is recorded in the manifest entry, so an incompatible bundle
+  is caught by `gbs check` and by manifest validation, before a player ever
+  loads it. Failing at validation is the point: a game that fails mysteriously
+  mid-session is indistinguishable from a broken platform.
+- Dropping a version is a deliberate act with a note, not a side effect of a
+  refactor.
+- This is the real cost of M6, and it is named at the start rather than
+  discovered in M7.
+
+## D-022: Conformance Checks The Contract, Not The Game
+
+Status: Accepted 2026-08-11
+
+Decision:
+`gbs check` verifies that a bundle honours the frame protocol and its own
+declared capabilities. It does not judge gameplay, and it does not require that
+input produce any particular visible effect.
+
+Context:
+An earlier draft of this check required that "input moves something". That is
+action-game bias dressed up as a standard: a turn-based game, a text game, or
+one that only acts on release would each fail it while being perfectly
+well-formed.
+
+Reason:
+The platform's legitimate interest is whether a game is well-formed — whether it
+handshakes, whether it decodes input correctly, whether its declared
+capabilities are true, whether it stays inside the sandbox. Whether input
+produces a particular response is the game's own claim about itself, and belongs
+in the game's own test.
+
+Consequences:
+- Input conformance is asserted at the layer where it is universal: the host
+  sends a button, and the SDK's input state reflects exactly that. Delivery and
+  decoding are checked; interpretation is not.
+- Declared capabilities are checked against behaviour, so the manifest cannot
+  lie: a game claiming `saves` must produce and restore bytes, and one not
+  claiming it must produce none.
+- `gbs check` reports that a game is well-formed and says plainly that it is not
+  a judgement of quality, so a passing result is not mistaken for approval.
+- The proof game carries its own browser test asserting visible response, which
+  is where that assertion belongs.
+
 ## Template For Future Decisions
 
 ### D-XXX: Decision Name

@@ -128,6 +128,9 @@ for (const game of selected) {
     sourcemap: false,
     // The project's `@/…` alias, resolved here rather than by Next — these
     // files are never seen by the application build.
+    // The `@/` alias only covers our own Originals, which live in this repo.
+    // The SDK is resolved as a real package now (D-020) — an externally
+    // authored game needs no alias at all.
     alias: { '@': `${REPO}/src` },
     logLevel: 'warning',
   });

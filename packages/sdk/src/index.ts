@@ -11,20 +11,24 @@
  * are the same shape from the author's side even though one is compiled into
  * the site and the other is not.
  *
- * This file is bundled into the hosted artifact, not into the application.
+ * This file is bundled into the hosted artifact, not into the application. It
+ * is installed from a tarball (D-020), so nothing here may reach back into the
+ * GameBoyStudio source — a package that did would not be installable anywhere.
  */
 
-import type { LogicalButton } from '@/emulation/core/types';
 import {
   FRAME_PROTOCOL_VERSION,
   parseHostMessage,
+  type GbsButton,
   type HostMessage,
-} from '../frameProtocol';
+} from './protocol.js';
+
+export * from './protocol.js';
 
 export interface HostedInput {
-  held(player: number, button: LogicalButton): boolean;
+  held(player: number, button: GbsButton): boolean;
   /** True on exactly one frame per press, so a tap is never swallowed. */
-  pressed(player: number, button: LogicalButton): boolean;
+  pressed(player: number, button: GbsButton): boolean;
 }
 
 export interface HostedGameContext {
@@ -55,11 +59,11 @@ export interface HostedGameDefinition {
 const MAX_DELTA_SECONDS = 0.25;
 
 class InputState implements HostedInput {
-  private readonly held_ = new Map<string, Set<LogicalButton>>();
-  private readonly pending = new Map<string, Set<LogicalButton>>();
-  private readonly frame = new Map<string, Set<LogicalButton>>();
+  private readonly held_ = new Map<string, Set<GbsButton>>();
+  private readonly pending = new Map<string, Set<GbsButton>>();
+  private readonly frame = new Map<string, Set<GbsButton>>();
 
-  private setFor(map: Map<string, Set<LogicalButton>>, player: number): Set<LogicalButton> {
+  private setFor(map: Map<string, Set<GbsButton>>, player: number): Set<GbsButton> {
     const key = String(player);
     let set = map.get(key);
     if (!set) {
@@ -69,7 +73,7 @@ class InputState implements HostedInput {
     return set;
   }
 
-  set(player: number, button: LogicalButton, pressed: boolean): void {
+  set(player: number, button: GbsButton, pressed: boolean): void {
     const held = this.setFor(this.held_, player);
     if (pressed) {
       if (!held.has(button)) this.setFor(this.pending, player).add(button);
@@ -93,11 +97,11 @@ class InputState implements HostedInput {
     this.frame.clear();
   }
 
-  held(player: number, button: LogicalButton): boolean {
+  held(player: number, button: GbsButton): boolean {
     return this.held_.get(String(player))?.has(button) ?? false;
   }
 
-  pressed(player: number, button: LogicalButton): boolean {
+  pressed(player: number, button: GbsButton): boolean {
     return this.frame.get(String(player))?.has(button) ?? false;
   }
 }

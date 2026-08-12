@@ -6,7 +6,7 @@
  * because it has nothing worth persisting.
  */
 import createDrift from '@/native/games/drift';
-import { runHostedGame } from '@/hosted/sdk';
+import { runHostedGame } from '@gameboystudio/sdk';
 import { hostNativeGame } from './nativeAdapter';
 
 runHostedGame(hostNativeGame(createDrift));
