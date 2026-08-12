@@ -188,6 +188,16 @@ make it *publishable* by them.
 4. The proof game is live on the hosted origin and plays in the real player with
    keyboard and touch.
 
+   **Gamepad on Sequence is unverified.** The only paired controller on this
+   machine is not connected, and Chrome does not expose a pad to a page until a
+   physical button is pressed on it, which cannot be done from here. Fake pads
+   can be injected into a local build but not into production, and the browser
+   suite does not cover Sequence. Recorded rather than worked around: gamepad
+   input reaching a *hosted* game is exercised by the same `InputRouter` path
+   that M4 verified and that the hosted checks drive with keyboard and a phone,
+   so the risk is low — but low is not verified, and it is worth one minute with
+   a controller in hand.
+
    **Corrected after the fact.** This originally said "keyboard, gamepad, touch
    and an M4 phone controller", which was not achievable and should not have
    been written: Sequence is a one-player game, and the Invite affordance is
