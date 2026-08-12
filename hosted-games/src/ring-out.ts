@@ -6,7 +6,7 @@
  * Out, the difference is the hosting and nothing else.
  */
 import createRingOut from '@/native/games/ring-out';
-import { runHostedGame } from '@/hosted/sdk';
+import { runHostedGame } from '@gameboystudio/sdk';
 import { hostNativeGame } from './nativeAdapter';
 
 runHostedGame(hostNativeGame(createRingOut));

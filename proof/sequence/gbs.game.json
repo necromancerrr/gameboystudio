@@ -1,0 +1,27 @@
+{
+  "slug": "sequence",
+  "title": "Sequence",
+  "developer": "GameBoyStudio",
+  "description": "Watch the pattern, then repeat it. Each round adds a step. Your longest run is kept.",
+  "entry": "game.ts",
+  "version": "1.0.0",
+  "players": {
+    "min": 1,
+    "max": 1
+  },
+  "inputs": {
+    "required": [],
+    "supported": [
+      "gamepad",
+      "keyboard",
+      "touch"
+    ]
+  },
+  "saves": true,
+  "genre": [
+    "Puzzle",
+    "Memory"
+  ],
+  "license": "LicenseRef-GameBoyStudio-Original",
+  "attribution": "GameBoyStudio"
+}

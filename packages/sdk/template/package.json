@@ -1,0 +1,9 @@
+{
+  "name": "gbs-game",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "gbs dev .",
+    "check": "gbs check ."
+  }
+}

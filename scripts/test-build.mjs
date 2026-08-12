@@ -18,6 +18,12 @@ let built = false;
 
 export function loadTestBuild() {
   if (!built) {
+    // The SDK is a real package now (D-020) and the application imports it, so
+    // its declarations have to exist before anything typechecks against them.
+    execFileSync(`${REPO}/node_modules/.bin/tsc`, ['-p', `${REPO}/packages/sdk/tsconfig.json`], {
+      cwd: REPO,
+      stdio: 'inherit',
+    });
     fs.rmSync(OUT, { recursive: true, force: true });
     execFileSync(`${REPO}/node_modules/.bin/tsc`, ['-p', `${REPO}/scripts/tsconfig.tests.json`], {
       cwd: REPO,

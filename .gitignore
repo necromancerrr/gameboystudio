@@ -2,6 +2,8 @@
 
 # dependencies
 /node_modules
+# ...and any nested ones, e.g. packages/sdk and the proof project
+node_modules/
 /.pnp
 .pnp.*
 .yarn/*
@@ -55,6 +57,15 @@ next-env.d.ts
 # URL ends up in production.
 /hosted-origin/public/games/
 /hosted-origin/public/manifest.json
+
+# SDK tarballs, produced by `npm run sdk:pack`
+/dist-sdk/
+/packages/sdk/dist/
+
+# The proof game's own build output. It is a record, not a buildable part of
+# this project — see proof/README.md.
+/proof/**/node_modules/
+/proof/**/.gbs/
 
 # wrangler's local state for the room relay
 /worker/.wrangler/
