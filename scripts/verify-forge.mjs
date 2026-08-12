@@ -25,6 +25,7 @@ const { Project, projectId } = await load('project.js');
 const { specFromRequest, applyChange, detectKind } = await load('spec.js');
 const { synthesize } = await load('synthesize.js');
 const { Synthesizer, ModelGenerator, generatorNamed } = await load('generator.js');
+const { viewOf } = await load('view.js');
 
 const reporter = makeReporter();
 const { check } = reporter;
@@ -220,6 +221,102 @@ await check('swapping the generator changes nothing else about the loop', async 
   const proposal = await custom.propose();
   assert.match(proposal.source, /runHostedGame/);
   assert.ok(new Synthesizer().name !== custom.name);
+});
+
+console.log('\nThe share pointer:');
+
+/** A project with revision 1 ready and promoted. The shape every check here starts from. */
+function shared(request = 'a memory game') {
+  const root = tmp();
+  const project = Project.create(root, projectId('demo'), 'demo');
+  const first = project.begin(request, specFromRequest(request), 'source');
+  project.setStatus(first.n, 'ready');
+  project.promote(first.n);
+  return project;
+}
+
+await check('a shared link resolves to the revision that is ready, not the newest', () => {
+  const project = shared();
+  const before = project.pointer;
+  assert.equal(before.artifact.version, project.revision(1).artifactVersion);
+
+  // Someone asks for a change. While it is being made, and after it fails, the
+  // link keeps playing what it always played. This is the whole reason the
+  // pointer is a separate file rather than a lookup of the last revision.
+  const second = project.begin('make it faster', specFromRequest('a memory game'), 'next');
+  assert.deepEqual(project.pointer.artifact, before.artifact, 'the pointer moved mid-build');
+  project.setStatus(second.n, 'failed');
+  assert.deepEqual(project.pointer.artifact, before.artifact, 'a failed change took the link');
+});
+
+await check('promoting a ready revision is the only thing that moves the pointer', () => {
+  const project = shared();
+  const before = project.pointer.artifact.version;
+  const second = project.begin('make it faster', specFromRequest('a memory game'), 'next');
+  project.setStatus(second.n, 'ready');
+  // Ready is not enough: nothing is shared until it is promoted.
+  assert.equal(project.pointer.artifact.version, before);
+  project.promote(second.n);
+  assert.notEqual(project.pointer.artifact.version, before);
+});
+
+await check('the pointer is unlisted and carries nothing else', () => {
+  // Small on purpose (D-025). If a field is added here without a decision, this
+  // fails and asks for one — which is the point.
+  assert.deepEqual(Object.keys(shared().pointer).sort(), [
+    'artifact',
+    'projectId',
+    'title',
+    'updatedAt',
+    'visibility',
+  ]);
+  assert.equal(shared().pointer.visibility, 'unlisted');
+});
+
+console.log('\nWhat a player is allowed to see:');
+
+await check('the view carries no revisions, no source and no versions', () => {
+  const project = shared();
+  const view = viewOf(project, '/play');
+  const serialized = JSON.stringify(view);
+  // The boundary is enforced by naming fields rather than by deleting them, so
+  // this is the check that notices when someone passes the project through.
+  assert.doesNotMatch(serialized, /artifactVersion|"n":|sourceOf|revisions|\.ts"|spec/);
+  assert.deepEqual(Object.keys(view).sort(), [
+    'canUndo',
+    'changes',
+    'couldNotDo',
+    'id',
+    'playUrl',
+    'status',
+    'title',
+    'understood',
+    'updatedAt',
+  ]);
+});
+
+await check('playUrl follows the pointer while a change is being made', () => {
+  const project = shared();
+  const playable = viewOf(project, '/play').playUrl;
+  const second = project.begin('make it faster', specFromRequest('a memory game'), 'next');
+  const during = viewOf(project, '/play');
+  assert.equal(during.status, 'building', 'the page should say it is working');
+  assert.equal(during.playUrl, playable, 'but the game on screen must not change');
+
+  project.setStatus(second.n, 'failed');
+  const after = viewOf(project, '/play');
+  assert.equal(after.status, 'failed');
+  assert.equal(after.playUrl, playable, 'a failure must leave the game they had');
+});
+
+await check('a failed rename does not rename the game they are playing', () => {
+  const project = shared();
+  const renamed = applyChange(project.current.spec, 'call it Tumble').spec;
+  const second = project.begin('call it Tumble', renamed, 'next');
+  project.setStatus(second.n, 'failed');
+  // The title follows what is playable, so the page and the link agree.
+  assert.equal(viewOf(project, '/play').title, project.current.spec.title);
+  assert.notEqual(viewOf(project, '/play').title, 'Tumble');
 });
 
 console.log('\nA fresh clone can build:');

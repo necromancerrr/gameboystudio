@@ -16,6 +16,10 @@
     "./toolbox": {
       "types": "./dist/toolbox/index.d.ts",
       "default": "./dist/toolbox/index.js"
+    },
+    "./cli": {
+      "types": "./dist/cli/index.d.ts",
+      "default": "./dist/cli/index.js"
     }
   },
   "bin": {

@@ -6,6 +6,8 @@
  * should drive these same calls rather than shell out.
  */
 export * from './project.js';
+export * from './pointer.js';
+export * from './view.js';
 export * from './spec.js';
 export * from './generator.js';
 export * from './loop.js';

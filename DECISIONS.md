@@ -1135,3 +1135,80 @@ Options considered:
 Reason:
 
 Consequences:
+
+## D-026: The Home Is A Ranked List Of Shelves
+
+Status: Accepted 2026-08-12
+
+Decision:
+The homepage is composed from shelves that each declare when they apply and how
+strongly they want the top, given local state. Nothing about their order lives
+in the page's markup. The ask sits above the ranking and is not a shelf.
+
+Context:
+GameBoyStudio is becoming a place where you ask for a game, but it is also a
+catalog of curated retro titles that works today and is most of what a first
+visitor sees. Writing the page as *ask, Continue, Your games, then the grid*
+would put the catalog's prominence into the layout — and the day generated play
+outgrows it, the page would have to be rebuilt rather than reordered.
+
+Reason:
+The prominence of the catalog is a **consequence of state**, not a decision. On
+a first visit nothing else applies, so the catalog leads, which is correct. Once
+someone has games of their own it drops below them, and once something is being
+made that leads. Same file, no rewrite.
+
+Consequences:
+- A shelf that renders nothing must not rank. `played` is counted the same way
+  the Continue shelf decides what to draw, or the ranking could place an empty
+  shelf above the fold.
+- `making` has no node of its own: a game being made is the "Your games" shelf
+  in a different state, and the transition should be a change of state rather
+  than a jump between two lists.
+- The weights are an argument, not a constant. They are meant to be edited when
+  the product learns something, which is the whole point of putting them in one
+  small file.
+- This is explicitly a prototype's home, not the permanent product. What it
+  protects is the ability to change its mind.
+
+## D-027: A Share Pointer, And Ownership Without Accounts
+
+Status: Accepted 2026-08-12
+
+Decision:
+Each generated project has one small server-side pointer: `projectId`, `title`,
+the current ready artifact, `updatedAt`, and `visibility: 'unlisted'`. It is
+written in exactly one place — `promote()` — and therefore can only ever name a
+revision that reached `ready`.
+
+A share URL is `/g/<id>`. Whoever opens it plays the game; the change controls
+appear only for the browser that asked for it.
+
+Context:
+Sharing is the last step of the loop and the first thing that cannot live in
+localStorage: the person opening the link has no device state. That forces the
+smallest possible piece of server-side truth, and the temptation is to make it a
+project system with accounts and publishing attached.
+
+Reason:
+Five fields answer the only question a link asks — *what do I load?* — and
+answer it with the last version that worked. Because `promote()` is the sole
+writer, a link shared an hour ago keeps playing while its owner is mid-change or
+has just broken something. That property is structural rather than remembered.
+
+Ownership is whether this browser is the one that asked. There are no accounts
+to check, so the honest options were to gate on nothing or to gate on what is
+actually known. It fails in the harmless direction: the worst case is that
+someone sees change controls for a game they already have the link to.
+
+Consequences:
+- Unlisted, and marked `noindex`: a shared link must not become a search result.
+- Generated games are served from the app, never through the hosted manifest
+  (D-018). They are personal, not curated, and must not reach the catalog.
+- They live at `/g/<id>`, not under `/games/`. Putting them on the catalog's
+  route would be the first step toward putting them in the catalog.
+- Losing the browser loses the index of your games, not the games. That is a
+  meaningfully better failure than pure-localStorage, and it is the reason the
+  pointer exists at all.
+- Nothing here is publishing. There is no discovery, no listing, and no way for
+  a generated game to appear to anyone who was not given the link.

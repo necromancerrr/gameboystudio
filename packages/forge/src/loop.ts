@@ -18,6 +18,7 @@ import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { Project, projectId, type ConformanceRecord, type GameSpec } from './project.js';
 import { generatorNamed, type GameGenerator } from './generator.js';
+import { buildProject, readProject } from '@gameboystudio/sdk/cli';
 
 export interface LoopOptions {
   root: string;
@@ -26,6 +27,11 @@ export interface LoopOptions {
   generator?: GameGenerator;
   /** Skip the browser conformance run. The fast path during iteration. */
   quick?: boolean;
+  /**
+   * Chosen by the caller rather than derived from the title, so a request can
+   * return an id before the work is done and the browser has something to poll.
+   */
+  id?: string;
 }
 
 export interface LoopResult {
@@ -130,6 +136,12 @@ async function runRevision(
   previous?: { spec: GameSpec; source: string },
 ): Promise<LoopResult> {
   const timings: Record<string, number> = {};
+  const clockAsync = async <T,>(name: string, body: () => Promise<T>): Promise<T> => {
+    const started = Date.now();
+    const value = await body();
+    timings[name] = Date.now() - started;
+    return value;
+  };
   const clock = <T,>(name: string, body: () => T): T => {
     const started = Date.now();
     const value = body();
@@ -171,7 +183,27 @@ async function runRevision(
 
   conformance.timings = timings;
   project.setConformance(revision.n, conformance);
-  project.setStatus(revision.n, conformance.ok ? 'ready' : 'failed');
+  // What the request was understood to mean travels with the revision, because
+  // the player-facing view needs it and it is also the record of what the spec
+  // could not express.
+  project.setStatus(
+    revision.n,
+    conformance.ok ? 'ready' : 'failed',
+    JSON.stringify({ applied: proposal.applied, ignored: proposal.ignored }),
+  );
+
+  // Build the artifact the player will actually load, before promoting: the
+  // pointer must never name a version whose files are not on disk.
+  if (conformance.ok) {
+    await clockAsync('publish', async () => {
+      // buildProject lays out <root>/<slug>/<version>/, so rooting it at the
+      // project gives play/<slug>/<version>/frame.html — which is what the
+      // pointer names.
+      await buildProject(readProject(project.dir), path.join(project.dir, 'play'), {
+        minify: true,
+      });
+    });
+  }
 
   // The pointer moves last, and only on success. A failed change leaves the
   // person with the game they already had.
@@ -198,7 +230,7 @@ export async function forgeNew(request: string, options: LoopOptions): Promise<L
   const generator = options.generator ?? generatorNamed('synthesizer');
   const preview = await generator.propose(request);
   const slug = slugify(preview.spec.title);
-  const project = Project.create(options.root, projectId(slug), slug);
+  const project = Project.create(options.root, options.id ?? projectId(slug), slug);
   return runRevision(project, request, generator, options);
 }
 

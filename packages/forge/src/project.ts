@@ -22,6 +22,7 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
+import { pointerFor, type SharePointer } from './pointer.js';
 
 export type RevisionStatus = 'generating' | 'checking' | 'repairing' | 'ready' | 'failed';
 
@@ -178,6 +179,10 @@ export class Project {
    * The only way `currentRevision` ever moves, and it refuses to move to
    * anything that is not ready. This is the rule that keeps a working game
    * working when a change goes wrong.
+   *
+   * Writing the share pointer here, and only here, is what makes a shared link
+   * safe: the pointer cannot name a revision that never reached ready, because
+   * this is the sole place it is written.
    */
   promote(n: number): void {
     const revision = this.revision(n);
@@ -186,6 +191,27 @@ export class Project {
     }
     this.data.currentRevision = n;
     this.save();
+    this.writePointer(revision.spec.title, revision.artifactVersion);
+  }
+
+  private writePointer(title: string, version: string): void {
+    const pointer = pointerFor(
+      this.data.id,
+      title,
+      version,
+      `play/${this.data.slug}/${version}/frame.html`,
+    );
+    fs.writeFileSync(
+      path.join(this.dir, 'pointer.json'),
+      `${JSON.stringify(pointer, null, 2)}\n`,
+    );
+  }
+
+  /** Null until something has been ready. What a share link resolves through. */
+  get pointer(): SharePointer | null {
+    const file = path.join(this.dir, 'pointer.json');
+    if (!fs.existsSync(file)) return null;
+    return JSON.parse(fs.readFileSync(file, 'utf8')) as SharePointer;
   }
 
   revision(n: number): Revision {

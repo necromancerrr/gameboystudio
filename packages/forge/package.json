@@ -6,6 +6,23 @@
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
-  "bin": { "forge": "./bin/forge.mjs" },
-  "scripts": { "build": "tsc -p tsconfig.json" }
+  "bin": {
+    "forge": "./bin/forge.mjs"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@gameboystudio/sdk": "file:../sdk"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./read": {
+      "types": "./dist/read.d.ts",
+      "default": "./dist/read.js"
+    }
+  }
 }

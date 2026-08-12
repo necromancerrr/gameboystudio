@@ -14,6 +14,13 @@ const eslintConfig = defineConfig([
     "next-env.d.ts",
     // Compiler output from the native runtime harness, not source.
     ".native-build/**",
+    // Same, for the browser-test harness. `npm run verify` runs lint first and
+    // leaves this behind, so without the ignore the suite passes once and then
+    // fails on its own output.
+    ".test-build/**",
+    // Generated games. Each is a real SDK project with its own node_modules,
+    // and none of it is this repository's source.
+    ".forge/**",
   ]),
 ]);
 

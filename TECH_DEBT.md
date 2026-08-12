@@ -82,3 +82,23 @@ paths; before that it silently skipped, which read as a pass and was not one.
 
 **Fixed when** the check passes, or is replaced by one that can fail for a
 reason we understand.
+
+## TD-003: `verify` failed on its own output, and on committed build output
+
+Status: Fixed 2026-08-12
+
+`npm run verify` starts with `npm run lint`, and lint had no ignore for
+`.test-build/` — the harness output an earlier verify run leaves behind. So the
+suite passed once on a clean tree and failed on the second run, on files it had
+generated itself.
+
+Separately, `packages/sdk/src/index.js` and `protocol.js` were committed in M6:
+CommonJS output emitted next to the TypeScript it came from. The package ships
+only `dist` (`files`), so they were unused, and their `require()` calls were two
+hard lint errors. Together these meant `npm run verify` could not reach its
+first check on `main`.
+
+Both are fixed here: `.test-build/` and `.forge/` are ignored by eslint, and the
+two stray files are deleted. The lesson is the one D-012 keeps teaching — a
+check that cannot run is not a check that passes, and "lint is green" was true
+only of a tree nobody had verified in.

@@ -22,7 +22,18 @@ const SDK = process.env.GBS_SDK_PATH ?? path.join(REPO, 'packages/sdk');
 
 const [command, ...rest] = process.argv.slice(2);
 const flag = (name) => rest.includes(`--${name}`);
-const words = rest.filter((value) => !value.startsWith('--'));
+const value = (name) => {
+  const at = rest.indexOf(`--${name}`);
+  return at >= 0 ? rest[at + 1] : undefined;
+};
+// Only these take a value. Treating every flag as taking one would let
+// `--quick "a memory game"` swallow the request.
+const TAKES_VALUE = new Set(['--id']);
+const consumed = new Set();
+rest.forEach((item, index) => {
+  if (TAKES_VALUE.has(item)) consumed.add(index + 1);
+});
+const words = rest.filter((item, index) => !item.startsWith('--') && !consumed.has(index));
 
 const report = (result) => {
   const t = result.timings;
@@ -56,7 +67,14 @@ try {
   switch (command) {
     case 'new':
       if (!words[0]) throw new Error('What kind of game?  forge new "a memory game"');
-      report(await forgeNew(words.join(' '), { root: ROOT, sdkPath: SDK, quick: flag('quick') }));
+      report(
+        await forgeNew(words.join(' '), {
+          root: ROOT,
+          sdkPath: SDK,
+          quick: flag('quick'),
+          id: value('id'),
+        }),
+      );
       break;
     case 'revise':
       if (words.length < 2) throw new Error('forge revise <id> "make it faster"');

@@ -1,4 +1,5 @@
 import { ContinueShelf } from '@/components/ContinueShelf';
+import { StudioHome } from '@/components/studio/Home';
 import { GameLibrary } from '@/components/GameLibrary';
 import { getAllGames, getConsoles } from '@/catalog';
 
@@ -15,16 +16,18 @@ export default function LibraryPage() {
           GameBoyStudio
         </h1>
         <p className="mt-1 text-sm text-muted">
-          {games.length} small games that start the moment you tap. Keyboard,
-          controller, or right here on your phone.
+          Ask for a game and play it in seconds — or pick one of{' '}
+          {games.length} that start the moment you tap.
         </p>
       </header>
 
-      {/* Above search: a returning player's intent is "resume", not "find
-          something new". Renders nothing at all on a first visit. */}
-      <ContinueShelf />
-
-      <GameLibrary games={games} consoles={getConsoles()} />
+      {/* Shelves are ranked rather than positioned, so the catalog leads a
+          first visit and recedes once someone has games of their own — without
+          this file being rewritten. See components/studio/shelves.ts. */}
+      <StudioHome
+        continueShelf={<ContinueShelf />}
+        library={<GameLibrary games={games} consoles={getConsoles()} />}
+      />
 
       <footer className="mt-16 border-t border-hairline pt-6 text-xs text-faint">
         Every game here is published by its author under a license that permits

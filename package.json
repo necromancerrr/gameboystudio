@@ -39,7 +39,8 @@
     "qrcode-generator": "^2.0.4",
     "react": "19.2.8",
     "react-dom": "19.2.8",
-    "@gameboystudio/sdk": "file:packages/sdk"
+    "@gameboystudio/sdk": "file:packages/sdk",
+    "@gameboystudio/forge": "file:packages/forge"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^5.20260810.1",
