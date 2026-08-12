@@ -53,22 +53,8 @@ export async function createMgbaModule(
 
   const factory = await loadFactory();
   /**
-   * Pass `canvas` and nothing else.
-   *
-   * Two Emscripten options that look harmless each break this build silently,
-   * and both were found by bisection rather than by any error:
-   *
-   * - `locateFile` — the obvious way to point at the .wasm. This is a pthreads
-   *   build, and the worker threads re-enter this same script and resolve the
-   *   binary themselves; overriding resolution on the main thread only leaves
-   *   the instance constructed, `loadGame()` returning true, and the main loop
-   *   never running. Not needed anyway: the default resolves relative to
-   *   mgba.js, which is already beside the .wasm.
-   * - `setStatus` — a no-op looks like the right way to suppress Emscripten's
-   *   DOM status writes, and it interferes with the generated `run()`.
-   *
-   * The failure mode in both cases is a white canvas with no console error, no
-   * rejected promise, and every readout claiming success. See GBA_SPIKE.md.
+   * Only `canvas` is passed. `locateFile` is unnecessary — Emscripten resolves
+   * the .wasm relative to mgba.js, which already sits beside it.
    */
   const module = await factory({ canvas });
 

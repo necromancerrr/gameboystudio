@@ -113,6 +113,10 @@ export class MgbaAdapter {
 
     this.module = module;
 
+    // Ours, not mGBA's: input normalization lives in src/input/. Mirrors the
+    // D-006 decision to suppress binjgb's built-in handling and touch pad.
+    module.toggleInput(false);
+
     const paths = module.filePaths();
     const name = source.romUrl.split('/').pop() ?? 'game.gba';
     this.romPath = `${paths.gamePath}/${name}`;
@@ -122,14 +126,9 @@ export class MgbaAdapter {
       throw new Error('mGBA rejected the ROM — not a valid Game Boy Advance image');
     }
 
-    /**
-     * loadGame does NOT start the loop. It returns true, the ROM is in the
-     * filesystem, listRoms() shows it, and the canvas stays white forever with
-     * no error anywhere. resumeGame is what actually runs it.
-     *
-     * This is the GBA restatement of D-012: every signal said loaded, and
-     * nothing was running.
-     */
+    // Explicit rather than required: loadGame starts the core on its own, and
+    // this makes the running state something the adapter states rather than
+    // inherits.
     module.resumeGame();
     this.running = true;
 
@@ -226,10 +225,10 @@ export class MgbaAdapter {
   /**
    * A first frame is "more than one colour on screen", polled from the core.
    *
-   * The obvious signal, `videoFrameEndedCallback`, is registered and never
-   * fires in this build. Waiting on it left the UI reporting "loading" over a
-   * game that was running perfectly — the exact failure D-012 was written
-   * about, arriving from a different direction.
+   * Polled rather than taken from `videoFrameEndedCallback` because the two
+   * answer different questions. The callback says the core ran a frame; this
+   * says a picture exists. A game that boots to black satisfies the first and
+   * not the second, and it is the second that should dismiss a loading state.
    */
   private watchForFirstFrame(): void {
     const poll = window.setInterval(() => {
