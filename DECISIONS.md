@@ -995,6 +995,131 @@ Consequences:
 - The proof game carries its own browser test asserting visible response, which
   is where that assertion belongs.
 
+## D-023: A Toolbox, Not A Format
+
+Status: Accepted 2026-08-12 — M7 direction
+
+Decision:
+Generated games compose GameBoyStudio primitives from a **toolbox** shipped in
+the SDK. A primitive earns its place only by having been independently
+reimplemented in at least two shipped games. No speculative engine, no framework,
+and no declarative format work.
+
+Context:
+M7 is to generate *within a GameBoyStudio game system* rather than produce
+arbitrary web pages. But D-018 deferred the declarative format on evidence
+grounds and that has not changed — three authored games is still too few.
+
+The distinction that resolves it:
+
+- A **format** is declarative data a runtime interprets. It constrains what a
+  game *can be*. Designing one now would be guessing.
+- A **toolbox** is a library a game *may call*. It constrains nothing, but a
+  generator composes known parts instead of reinventing them.
+
+Reason:
+The toolbox is derived rather than invented. Across Drift, Ring Out and
+Sequence, each of these was written three separate times, slightly differently:
+a phase machine with a timer, elapsed-time accumulation from `dt`, text and
+rectangle drawing at a fixed resolution, a versioned serialize/restore for a
+best score, and randomness.
+
+That duplication is what makes a toolbox earned. It is also precisely what shows
+a format is not: nothing in that list says what a game *is*, only what games
+repeatedly need.
+
+Consequences:
+- **The rule is a gate, not a guideline.** A new primitive requires a game that
+  already needed it. Anticipating what a generator "will probably want" is how a
+  toolbox becomes an engine.
+- The toolbox ships in the SDK, so creators get it too. It is the game system,
+  not an internal helper.
+- **Drift, Ring Out and Sequence are not migrated onto it in M7.** They are the
+  evidence it was derived from, and rewriting working code would be churn
+  against three milestones of verified behaviour.
+- What generated games reach for — and what they reinvent *despite* the toolbox
+  offering it — is the empirical input the eventual schema should be designed
+  from. The toolbox is how the format gets earned.
+
+## D-024: A Generated Game Is A Project With Append-Only Revisions
+
+Status: Accepted 2026-08-12
+
+Decision:
+A generated game is a durable **project** with an ordered, append-only list of
+revisions. Each revision records its parent, the request in the person's own
+words, the spec that request produced, a source snapshot, the artifact version
+it built to, its conformance verdict, and a status of
+`generating | checking | repairing | ready | failed`.
+
+`currentRevision` advances **only** when a new revision reaches `ready`.
+
+Context:
+Generating a game once is stateless and easy. The milestone's actual claim is
+the second half of the loop — that a follow-up request modifies *that same
+game* — and that is impossible without the game being a durable thing with a
+history.
+
+Reason:
+Two rules do the work.
+
+**Revisions are added, never edited.** Every attempt keeps its own source and
+its own verdict, so a failed attempt is a record of what was tried rather than
+the loss of what worked.
+
+**The current pointer moves last.** While a follow-up is generating, checking or
+repairing, the previous version stays playable — and if the new one fails, it
+stays playable permanently. A person who asks for a change and gets a broken
+game has lost their game; that must not be possible.
+
+Consequences:
+- This is the same shape M5 already uses for publishing (D-019): a new immutable
+  version is built beside the old one and a pointer moves at the end. Iteration
+  and publishing turn out to be the same mechanism, which is why a generated
+  game is already publishable without inventing distribution.
+- Persistence is **local and project-scoped** — a directory on disk. No
+  accounts, no cloud, no database. Those are deliberately out of scope, and
+  nothing here forecloses them: a project id is the seed of shareability later.
+- A failed revision is kept rather than discarded. It is the record of what a
+  generator could not do, which is the research the corpus run depends on.
+- Status is explicit rather than inferred, so a project interrupted mid-run is
+  in a state that can be read rather than guessed at.
+
+## D-025: The Model Boundary Is Built, The Model Is Not Chosen
+
+Status: Accepted 2026-08-12
+
+Decision:
+Generation sits behind a `GameGenerator` adapter with two implementations: a
+**synthesizer** that composes a game from a spec using the toolbox, with no
+model and no cost, and a model-backed one that is **deliberately not selected or
+called in M7**.
+
+Context:
+The milestone must prove the loop end to end without spending anything or
+committing to a provider.
+
+Reason:
+The synthesizer is not a stub. It genuinely turns a request into a game, so the
+pipeline is provable for free — and a stub returning canned files would have
+made the proof hollow, since the pipeline would never have been exercised.
+
+Building it is also research in its own right. A rule-based composer over the
+toolbox is a proto-schema: where it strains to express a request is exactly
+where a declarative format would strain, and that is evidence no amount of
+design discussion produces.
+
+Consequences:
+- Swapping in a model must change **only** the adapter. That is a verification
+  item, not an intention.
+- The synthesizer path has a stated budget: **under 20 seconds** from request to
+  playable, with generate, build, check and reload timed *separately* so a
+  regression is attributable to a phase rather than to the whole.
+- Real-model latency is measured separately, when one is chosen. It is additive
+  to this budget, not a replacement for it.
+- Provider, cost ceiling and where inference runs are decided later, on their
+  own merits, rather than as a side effect of building the loop.
+
 ## Template For Future Decisions
 
 ### D-XXX: Decision Name

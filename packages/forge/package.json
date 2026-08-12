@@ -1,0 +1,11 @@
+{
+  "name": "@gameboystudio/forge",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Ask for a game, play it, ask again. Internal — not shipped to creators.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "bin": { "forge": "./bin/forge.mjs" },
+  "scripts": { "build": "tsc -p tsconfig.json" }
+}
