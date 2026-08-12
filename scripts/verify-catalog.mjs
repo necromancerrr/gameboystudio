@@ -119,9 +119,20 @@ async function screenAfter({ holdStart, installCallback, romPath, warmupSec, hol
   return h;
 }
 
+/**
+ * These read ROMs from disk, not from the catalog, so they went on passing after
+ * the two games they named were cut. Renamed to games that are actually
+ * shipping, and widened from two to four while here.
+ *
+ * maxpirateeb is deliberately absent: its title screen does not respond to
+ * START (A advances it), so it fails a START-only assertion for a reason that
+ * has nothing to do with the joypad callback. Verified by running it here.
+ */
 const INPUT_CASES = [
-  { slug: 'tobutobugirl', romPath: '/roms/tobutobugirl.gb', warmupSec: 12, holdSec: 4 },
-  { slug: 'snake', romPath: '/roms/snake.gb', warmupSec: 6, holdSec: 4 },
+  { slug: 'tobutobugirldeluxe', romPath: '/roms/tobutobugirldeluxe.gb', warmupSec: 12, holdSec: 4 },
+  { slug: 'crossconnect', romPath: '/roms/crossconnect.gbc', warmupSec: 6, holdSec: 4 },
+  { slug: 'gbhack', romPath: '/roms/gbhack.gbc', warmupSec: 6, holdSec: 4 },
+  { slug: '2048gb', romPath: '/roms/2048gb.gb', warmupSec: 6, holdSec: 4 },
 ];
 
 console.log('\nInput reaching the core:');

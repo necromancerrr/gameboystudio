@@ -4,14 +4,20 @@ Every ROM in `public/roms` carries an explicit license permitting redistribution
 verified against the upstream repository rather than trusted from catalog
 metadata, and boots successfully under binjgb. See D-008.
 
-20 titles. Re-check with `npm run verify:catalog`.
+20 ROMs, of which 13 are listed in the catalog. Re-check with
+`npm run verify:catalog`.
+
+The seven marked *unlisted* below were cut from the catalog for editorial
+reasons — duplicates of a better version, or nothing to distinguish them — not
+for any licensing problem. Their files are kept so the decision stays reversible
+and so the attribution record stays complete. See CATALOG_LINEUP.md.
 
 | Game | Author | License | Source |
 | --- | --- | --- | --- |
 | 2048gb | Sanqui | Zlib | https://github.com/Sanqui/2048-gb |
-| 5 mazes | godai / Gniazdo Światów | MIT | https://github.com/godai78/5-Mazes |
-| 5 mazes: Master levels | godai / Gniazdo Światów | MIT | https://github.com/godai78/5-mazes-Master-levels |
-| 5 more mazes | godai / Gniazdo Światów | MIT | https://github.com/godai78/5-more-mazes |
+| 5 mazes *(unlisted)* | godai / Gniazdo Światów | MIT | https://github.com/godai78/5-Mazes |
+| 5 mazes: Master levels *(unlisted)* | godai / Gniazdo Światów | MIT | https://github.com/godai78/5-mazes-Master-levels |
+| 5 more mazes *(unlisted)* | godai / Gniazdo Światów | MIT | https://github.com/godai78/5-more-mazes |
 | Aevilia | ISSOtm, Kai, Parzival, Charmy | Apache-2.0 | https://github.com/ISSOtm/Aevilia-GB |
 | CrossConnect | quinnp | MIT | https://github.com/QuinnPainter/CrossConnect |
 | Europa rescue! | godai / Gniazdo Światów | CC-BY-SA-4.0 | https://github.com/godai78/europa |
@@ -19,14 +25,14 @@ metadata, and boots successfully under binjgb. See D-008.
 | GBHack | statico | MIT | https://github.com/statico/gbhack |
 | JP | Graham Coulby (IonicLimb) | MIT | https://github.com/gcoulby/JP |
 | Labirinth | godai / Gniazdo Światów | CC-BY-SA-4.0 | https://github.com/godai78/labirinth |
-| Max Pirate | Lemmy Hawkins | MIT | https://github.com/MWehrstedt/MaxPirate |
+| Max Pirate *(unlisted)* | Lemmy Hawkins | MIT | https://github.com/MWehrstedt/MaxPirate |
 | Max Pirate Extra Boom | Lemmy Hawkins | MIT | https://github.com/MWehrstedt/MaxPirateExtra |
 | PostBot | Tobias Rojahn | MIT | https://github.com/MasterIV/PostBot |
 | Renegade Rush | quinnp | MIT | https://github.com/QuinnPainter/Renegade-Rush |
 | Shock Lobster | tbsp | Zlib | https://github.com/tbsp/shock-lobster |
-| Snake | Yvar de Goffau | WTFPL-2.0 | https://github.com/Yvar-deGoffau/GBSnake |
-| Squishy the Turtle | Cppchriscpp | MIT | https://github.com/potatolain/SquishyTheTurtle |
-| Tobu Tobu Girl | Tangram Games | MIT | https://github.com/SimonLarsen/tobutobugirl |
+| Snake *(unlisted)* | Yvar de Goffau | WTFPL-2.0 | https://github.com/Yvar-deGoffau/GBSnake |
+| Squishy the Turtle *(unlisted)* | Cppchriscpp | MIT | https://github.com/potatolain/SquishyTheTurtle |
+| Tobu Tobu Girl *(unlisted)* | Tangram Games | MIT | https://github.com/SimonLarsen/tobutobugirl |
 | Tobu Tobu Girl Deluxe | Tangram Games | MIT | https://github.com/SimonLarsen/tobutobugirl-dx |
 
 ## Excluded
