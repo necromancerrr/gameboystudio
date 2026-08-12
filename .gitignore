@@ -76,3 +76,6 @@ next-env.d.ts
 # browser verification screenshots (review artifacts)
 /.browser-shots/
 /.forge/
+
+# GBA spike: ROMs are fetched, not committed. See scripts/fetch-spike-roms.mjs
+/public/spike-roms/
