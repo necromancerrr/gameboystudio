@@ -1,0 +1,12 @@
+{
+  "name": "gbs-game",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "gbs dev .",
+    "check": "gbs check ."
+  },
+  "dependencies": {
+    "@gameboystudio/sdk": "file:../../../../tmp/gameboystudio-sdk-1.0.0.tgz"
+  }
+}

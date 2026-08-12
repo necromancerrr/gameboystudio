@@ -22,8 +22,10 @@ import {
   type GbsButton,
   type HostMessage,
 } from './protocol.js';
+import { ConformanceRecord, isProbe } from './conformance.js';
 
 export * from './protocol.js';
+export * from './conformance.js';
 
 export interface HostedInput {
   held(player: number, button: GbsButton): boolean;
@@ -83,6 +85,15 @@ class InputState implements HostedInput {
     }
   }
 
+  /** Everything currently held, as `player:button`, for the conformance probe. */
+  snapshotHeld(): string[] {
+    const out: string[] = [];
+    for (const [player, buttons] of this.held_) {
+      for (const button of buttons) out.push(`${player}:${button}`);
+    }
+    return out.sort();
+  }
+
   beginFrame(): void {
     this.frame.clear();
     for (const [key, set] of this.pending) {
@@ -129,6 +140,7 @@ export function runHostedGame(game: HostedGameDefinition): void {
   let last = 0;
   let handle: number | null = null;
   let painted = false;
+  const record = new ConformanceRecord();
 
   const send = (message: unknown) => window.parent.postMessage(message, '*');
 
@@ -160,6 +172,7 @@ export function runHostedGame(game: HostedGameDefinition): void {
     last = timestamp;
     if (dt > 0) {
       input.beginFrame();
+      record.noteFrame();
       try {
         game.update(dt, input);
         draw();
@@ -223,6 +236,7 @@ export function runHostedGame(game: HostedGameDefinition): void {
         return;
       case 'input':
         input.set(message.player, message.button, message.pressed);
+        if (message.pressed) record.notePressed(message.player, message.button);
         return;
       case 'mute':
         // The game owns its own audio; the host only says which way.
@@ -259,6 +273,23 @@ export function runHostedGame(game: HostedGameDefinition): void {
   window.addEventListener('message', (event: MessageEvent) => {
     // Only the embedder talks to us. Anything else is not part of this session.
     if (event.source !== window.parent) return;
+
+    // Conformance only, never sent during play: the checker asks what this
+    // runtime observed so that input delivery can be proven without asserting
+    // anything about what the game did with it (D-022).
+    if (isProbe(event.data)) {
+      send({
+        t: 'probeResult',
+        frames: record.frames,
+        running,
+        players,
+        held: input.snapshotHeld(),
+        pressed: record.drainPressed(),
+        canSave: typeof game.serialize === 'function' && typeof game.restore === 'function',
+      });
+      return;
+    }
+
     const message = parseHostMessage(event.data);
     if (message) void apply(message);
   });

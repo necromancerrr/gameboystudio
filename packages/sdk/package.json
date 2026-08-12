@@ -8,10 +8,25 @@
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
-    ".": { "types": "./dist/index.d.ts", "default": "./dist/index.js" },
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
     "./preview": "./dist/preview.js"
   },
-  "bin": { "gbs": "./bin/gbs.mjs" },
-  "files": ["dist", "bin", "template", "README.md"],
-  "scripts": { "build": "tsc -p tsconfig.json" }
+  "bin": {
+    "gbs": "./bin/gbs.mjs"
+  },
+  "files": [
+    "dist",
+    "bin",
+    "template",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "esbuild": "^0.25.0"
+  }
 }
