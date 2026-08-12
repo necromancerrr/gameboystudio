@@ -1,0 +1,15 @@
+{
+  "//": "Forge drives the SDK; it never reaches into the GameBoyStudio application. It is private because generation is not a creator feature yet (D-025).",
+  "compilerOptions": {
+    "target": "es2022",
+    "lib": ["es2022", "dom"],
+    "module": "nodenext",
+    "moduleResolution": "nodenext",
+    "strict": true,
+    "declaration": true,
+    "skipLibCheck": true,
+    "outDir": "dist",
+    "rootDir": "src"
+  },
+  "include": ["src/**/*.ts"]
+}

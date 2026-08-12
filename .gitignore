@@ -61,6 +61,7 @@ next-env.d.ts
 # SDK tarballs, produced by `npm run sdk:pack`
 /dist-sdk/
 /packages/sdk/dist/
+/packages/forge/dist/
 
 # The proof game's own build output. It is a record, not a buildable part of
 # this project — see proof/README.md.
@@ -74,3 +75,4 @@ next-env.d.ts
 
 # browser verification screenshots (review artifacts)
 /.browser-shots/
+/.forge/

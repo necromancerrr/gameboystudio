@@ -151,12 +151,34 @@ class Debugger {
   }
 }
 
+/**
+ * The verdict, in a shape a program can act on.
+ *
+ * A generation loop needs to know *which* rule failed so it can feed that back
+ * into the next attempt. Prose is for people; this is for the loop.
+ */
+export interface CheckVerdict {
+  slug: string;
+  version: string;
+  ok: boolean;
+  checks: { name: string; ok: boolean; detail?: string }[];
+  failed: string[];
+}
+
 export async function runCheck(args: string[]): Promise<boolean> {
+  const asJson = args.includes('--json');
+  const verdict = await check(args);
+  if (asJson) console.log(JSON.stringify(verdict, null, 2));
+  return verdict.ok;
+}
+
+export async function check(args: string[]): Promise<CheckVerdict> {
+  const asJson = args.includes('--json');
   const dir = args.find((value) => !value.startsWith('--')) ?? '.';
   const project = readProject(dir);
   const reports: Report[] = [];
 
-  console.log(`\nChecking ${project.slug} ${project.version}\n`);
+  if (!asJson) console.log(`\nChecking ${project.slug} ${project.version}\n`);
 
   // --- Things that need no browser -----------------------------------------
 
@@ -194,12 +216,24 @@ export async function runCheck(args: string[]): Promise<boolean> {
 
   // --- Things that need the browser ----------------------------------------
 
+  // The iteration fast path. It skips the browser stage, which is the only slow
+  // part, and says so — a run that silently checked less would be worse than a
+  // slow one.
+  if (args.includes('--quick')) {
+    reports.push({ ok: true, name: 'built and bundled (--quick: runtime checks skipped)' });
+    if (!asJson) reports.forEach(say);
+    return summarise(project.slug, project.version, reports);
+  }
+
   const chrome = CHROME_CANDIDATES.find((candidate) => fs.existsSync(candidate));
   if (!chrome) {
-    console.log('  No Chrome found. Set CHROME_PATH to run the runtime checks.');
-    console.log('  SKIPPED — this is not a pass.\n');
-    reports.forEach(say);
-    return false;
+    reports.push({
+      ok: false,
+      name: 'a browser is available to run the runtime checks',
+      detail: 'no Chrome found; set CHROME_PATH. Skipping is not passing.',
+    });
+    if (!asJson) reports.forEach(say);
+    return summarise(project.slug, project.version, reports);
   }
 
   const port = 8791;
@@ -463,12 +497,25 @@ export async function runCheck(args: string[]): Promise<boolean> {
     fs.rmSync(staging, { recursive: true, force: true });
   }
 
-  reports.forEach(say);
   const bad = reports.filter((report) => !report.ok);
-  console.log(
-    bad.length === 0
-      ? `\n${project.slug} is well-formed. That is not a judgement about whether it is any good.\n`
-      : `\n${bad.length} problem${bad.length === 1 ? '' : 's'}. This bundle would not be accepted.\n`,
-  );
-  return bad.length === 0;
+  if (!asJson) {
+    reports.forEach(say);
+    console.log(
+      bad.length === 0
+        ? `\n${project.slug} is well-formed. That is not a judgement about whether it is any good.\n`
+        : `\n${bad.length} problem${bad.length === 1 ? '' : 's'}. This bundle would not be accepted.\n`,
+    );
+  }
+  return summarise(project.slug, project.version, reports);
+}
+
+function summarise(slug: string, version: string, reports: Report[]): CheckVerdict {
+  const bad = reports.filter((report) => !report.ok);
+  return {
+    slug,
+    version,
+    ok: bad.length === 0,
+    checks: reports.map(({ ok, name, detail }) => ({ name, ok, ...(detail ? { detail } : {}) })),
+    failed: bad.map((report) => report.name),
+  };
 }

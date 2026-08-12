@@ -12,7 +12,11 @@
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
     },
-    "./preview": "./dist/preview.js"
+    "./preview": "./dist/preview.js",
+    "./toolbox": {
+      "types": "./dist/toolbox/index.d.ts",
+      "default": "./dist/toolbox/index.js"
+    }
   },
   "bin": {
     "gbs": "./bin/gbs.mjs"
