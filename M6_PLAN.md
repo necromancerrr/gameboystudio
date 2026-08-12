@@ -186,7 +186,22 @@ make it *publishable* by them.
 3. Editing a source file shows the change in the preview host in seconds, with
    no deploy.
 4. The proof game is live on the hosted origin and plays in the real player with
-   keyboard, gamepad, touch and an M4 phone controller.
+   keyboard and touch.
+
+   **Corrected after the fact.** This originally said "keyboard, gamepad, touch
+   and an M4 phone controller", which was not achievable and should not have
+   been written: Sequence is a one-player game, and the Invite affordance is
+   gated on `players.max > 1`, so no phone can be attached to it at all. That is
+   a real product question — a phone as the controller for a solo game is a
+   reasonable thing to want, and M4's plumbing already supports it — but it is a
+   change to the player, not to M6, and it is not made here.
 5. The existing hosted artifacts still build and pass.
 6. `npm run verify` passes, including new checks that fail when deliberately
    broken.
+
+   **Outstanding.** Everything except `verify:browser` passes. That suite cannot
+   complete on this machine: it kills the browser at "a run can be lost and
+   restarted with the keyboard", reproducibly, and **it does so on `main` too**
+   — verified in a clean worktree with no M6 code present. So it is not M6's
+   doing, but it does mean the browser suite has not been run end to end against
+   this branch, and that should be resolved before merging rather than assumed.
