@@ -209,9 +209,9 @@ make it *publishable* by them.
 6. `npm run verify` passes, including new checks that fail when deliberately
    broken.
 
-   **Outstanding.** Everything except `verify:browser` passes. That suite cannot
-   complete on this machine: it kills the browser at "a run can be lost and
-   restarted with the keyboard", reproducibly, and **it does so on `main` too**
-   — verified in a clean worktree with no M6 code present. So it is not M6's
-   doing, but it does mean the browser suite has not been run end to end against
-   this branch, and that should be resolved before merging rather than assumed.
+   **Everything except `verify:browser` passes.** That suite cannot complete on
+   this machine — it kills the browser at "a run can be lost and restarted with
+   the keyboard" — and **it does so on clean `main` too**, verified in a
+   worktree with no M6 code present. It is therefore not an M6 regression and is
+   tracked separately as TD-001, with the evidence gathered so far and what has
+   already been ruled out.
