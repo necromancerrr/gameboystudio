@@ -1142,7 +1142,8 @@ Consequences, in rough order of how much they cost:
   both `/games/[slug]`. So every cross-origin subresource must now opt in. The
   only one we have is the hosted-games origin (D-019), which now sets CORP and
   COEP on its own responses. **Deploying the app without deploying that Worker
-  breaks every hosted game.**
+  breaks every hosted game.** The order and the hazard in the Worker's own
+  deploy step are written up in RELEASE_GBA.md.
 - **`LogicalButton` is ten wide, not eight.** L and R are produced by the
   keyboard (Q/E) and gamepad (bumpers and triggers) bindings for every console,
   and dropped by the adapters that have nowhere to send them. The input layer

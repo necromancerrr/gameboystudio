@@ -5,6 +5,10 @@ immediately — no ROM upload, no plugin, keyboard or controller.
 
 **Live: https://gameboy-jet.vercel.app**
 
+> **Deploying?** Read RELEASE_GBA.md first. The hosted-games Worker must be
+> deployed before the app, and `npm run hosted:deploy` is not safe to run on its
+> own — it uploads a build directory that does not match production.
+
 ## Status
 
 The core loop works: **discover → open → connect controller → play**.
