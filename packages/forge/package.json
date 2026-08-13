@@ -13,6 +13,7 @@
     "build": "tsc -p tsconfig.json"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.116.0",
     "@gameboystudio/sdk": "file:../sdk"
   },
   "exports": {

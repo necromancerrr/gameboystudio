@@ -40,6 +40,12 @@ export interface GameView {
   couldNotDo: string[];
   /** The person's own requests, newest first. */
   changes: ChangeView[];
+  /**
+   * Why this is not playable, in the person's language. Null when nothing is
+   * wrong. Never a check name — the conformance verdict is written for the
+   * platform and reads as gibberish to whoever asked for a game.
+   */
+  problem: string | null;
   /** Whether there is an earlier ready version to fall back to. */
   canUndo: boolean;
   updatedAt: string | null;
@@ -50,6 +56,20 @@ function statusOf(internal: RevisionStatus): GameStatus {
   if (internal === 'ready') return 'ready';
   if (internal === 'failed') return 'failed';
   return 'building';
+}
+
+/**
+ * The two failures worth telling apart.
+ *
+ * Losing a change you asked for is a different event from never getting a game
+ * at all, and the reassurance only belongs in the first — telling someone their
+ * previous version is safe when they never had one is worse than saying nothing.
+ */
+function problemOf(status: RevisionStatus | null, hasPlayable: boolean): string | null {
+  if (status !== 'failed') return null;
+  return hasPlayable
+    ? 'That change did not come out working, so it was not applied. You still have the version you had.'
+    : 'That one did not come out working. Try describing it a different way.';
 }
 
 export function viewOf(project: Project, playBase: string): GameView {
@@ -80,6 +100,7 @@ export function viewOf(project: Project, playBase: string): GameView {
         current: revision.n === current?.n,
         failed: revision.status === 'failed',
       })),
+    problem: problemOf(latest?.status ?? null, pointer !== null),
     canUndo: readyCount > 1,
     updatedAt: pointer?.updatedAt ?? null,
   };

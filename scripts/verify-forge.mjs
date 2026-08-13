@@ -24,7 +24,10 @@ const load = (relative) => import(path.join(REPO, 'packages/forge/dist', relativ
 const { Project, projectId } = await load('project.js');
 const { specFromRequest, applyChange, detectKind } = await load('spec.js');
 const { synthesize } = await load('synthesize.js');
-const { Synthesizer, ModelGenerator, generatorNamed } = await load('generator.js');
+const { Synthesizer, ModelGenerator, generatorNamed, defaultGenerator, MODEL } =
+  await load('generator.js');
+const { SDK_GUIDE, GUIDE_SYMBOLS } = await load('sdkGuide.js');
+const { logRequest, readRequests } = await load('log.js');
 const { viewOf } = await load('view.js');
 
 const reporter = makeReporter();
@@ -193,12 +196,121 @@ await check('the synthesizer costs nothing and needs no provider', async () => {
   assert.match(proposal.source, /runHostedGame/);
 });
 
-await check('the model generator is present and deliberately unselected', async () => {
-  // D-025: the boundary is built, the model is not chosen. It has to fail
-  // clearly rather than silently fall back to the synthesizer, or "we have not
-  // chosen a model" would be indistinguishable from "we have".
-  const generator = new ModelGenerator();
-  await assert.rejects(() => generator.propose('a memory game'), /No model provider/);
+await check('a model is chosen, and it is the one the decision names', () => {
+  // D-028. Named here so a quiet downgrade to a cheaper model is a test
+  // failure rather than a thing someone notices in output quality weeks later.
+  assert.equal(MODEL, 'claude-opus-5');
+  assert.equal(new ModelGenerator({}).name, 'model');
+});
+
+await check('the default generator follows the environment, and can be overridden', () => {
+  const saved = { ...process.env };
+  try {
+    delete process.env.GBS_GENERATOR;
+    delete process.env.ANTHROPIC_API_KEY;
+    delete process.env.ANTHROPIC_AUTH_TOKEN;
+    // No credentials: the whole loop still runs, for free. This is what keeps
+    // the rest of this suite from depending on a paid service.
+    assert.equal(defaultGenerator().name, 'synthesizer');
+
+    process.env.ANTHROPIC_API_KEY = 'sk-ant-not-a-real-key';
+    assert.equal(defaultGenerator().name, 'model');
+
+    // And an explicit choice beats the environment, so a developer with a real
+    // key set does not silently spend money running the tests.
+    process.env.GBS_GENERATOR = 'synthesizer';
+    assert.equal(defaultGenerator().name, 'synthesizer');
+  } finally {
+    process.env = saved;
+  }
+});
+
+await check('the SDK guide describes an API the SDK actually has', async () => {
+  // The guide is prose, so nothing type-checks it. A rename in the SDK would
+  // leave the model writing confident code against an API that no longer
+  // exists, and the only symptom would be a conformance failure pointing
+  // somewhere else entirely.
+  const root = await import(path.join(REPO, 'packages/sdk/dist/index.js'));
+  const toolbox = await import(path.join(REPO, 'packages/sdk/dist/toolbox/index.js'));
+
+  for (const name of GUIDE_SYMBOLS.root) {
+    assert.ok(name in root, `the guide promises ${name}, which the SDK does not export`);
+  }
+  for (const name of GUIDE_SYMBOLS.toolbox) {
+    assert.ok(name in toolbox, `the guide promises toolbox.${name}, which does not exist`);
+  }
+
+  // Every button the guide lists, and no button it does not.
+  assert.deepEqual(
+    [...root.GBS_BUTTONS].sort(),
+    ['a', 'b', 'down', 'left', 'right', 'select', 'start', 'up'],
+  );
+  for (const button of root.GBS_BUTTONS) {
+    assert.ok(SDK_GUIDE.includes(`'${button}'`), `the guide never mentions the ${button} button`);
+  }
+});
+
+console.log('\nWhat was asked for, and what failed:');
+
+await check('every attempt is recorded, including the ones that never got a verdict', () => {
+  const root = tmp();
+  logRequest(root, {
+    at: new Date().toISOString(),
+    projectId: 'game-1',
+    revision: 1,
+    kind: 'new',
+    request: 'a game about a lighthouse',
+    generator: 'model',
+    ok: false,
+    applied: [],
+    ignored: [],
+    failed: ['it compiles'],
+    timings: { generate: 9000 },
+  });
+  logRequest(root, {
+    at: new Date().toISOString(),
+    projectId: 'game-1',
+    revision: 2,
+    kind: 'change',
+    request: 'make the beam sweep faster',
+    generator: 'model',
+    ok: true,
+    applied: ['the beam sweeps faster'],
+    ignored: [],
+    failed: [],
+    timings: { generate: 8000 },
+  });
+
+  const records = readRequests(root);
+  assert.equal(records.length, 2);
+  // The failure is the record worth having: it is the only place the shape of
+  // a request that did not work survives.
+  assert.equal(records[0].ok, false);
+  assert.deepEqual(records[0].failed, ['it compiles']);
+  assert.equal(records[1].request, 'make the beam sweep faster');
+});
+
+await check('a truncated final line does not cost the whole log', () => {
+  const root = tmp();
+  logRequest(root, {
+    at: new Date().toISOString(),
+    projectId: 'game-1',
+    revision: 1,
+    kind: 'new',
+    request: 'a good one',
+    generator: 'model',
+    ok: true,
+    applied: [],
+    ignored: [],
+    failed: [],
+    timings: {},
+  });
+  // An interrupted append leaves half an object behind. Losing that line is
+  // fine; losing the ones before it is not.
+  fs.appendFileSync(path.join(root, 'requests.jsonl'), '{"at":"2026-08-12","proj');
+  const records = readRequests(root);
+  assert.equal(records.length, 1);
+  assert.equal(records[0].request, 'a good one');
 });
 
 await check('swapping the generator changes nothing else about the loop', async () => {
@@ -288,6 +400,7 @@ await check('the view carries no revisions, no source and no versions', () => {
     'couldNotDo',
     'id',
     'playUrl',
+    'problem',
     'status',
     'title',
     'understood',
@@ -307,6 +420,31 @@ await check('playUrl follows the pointer while a change is being made', () => {
   const after = viewOf(project, '/play');
   assert.equal(after.status, 'failed');
   assert.equal(after.playUrl, playable, 'a failure must leave the game they had');
+});
+
+await check('a failure is explained in the language of someone who asked for a game', () => {
+  // The conformance verdict says things like "the manifest entry is valid".
+  // That is written for the platform; a person who asked for a game and got
+  // nothing needs a sentence, and needs to know whether they still have the
+  // game they had.
+  const project = shared();
+  assert.equal(viewOf(project, '/play').problem, null, 'a working game has no problem');
+
+  const second = project.begin('make it faster', specFromRequest('a memory game'), 'next');
+  project.setStatus(second.n, 'failed');
+  const afterChange = viewOf(project, '/play').problem;
+  assert.match(afterChange, /still have the version you had/);
+  assert.doesNotMatch(afterChange, /manifest|conformance|bundle|revision/);
+
+  // A first game that never worked must not be reassured about a version it
+  // never had.
+  const root = tmp();
+  const fresh = Project.create(root, projectId('demo'), 'demo');
+  const only = fresh.begin('a game', specFromRequest('a memory game'), 'src');
+  fresh.setStatus(only.n, 'failed');
+  const afterFirst = viewOf(fresh, '/play').problem;
+  assert.match(afterFirst, /did not come out working/);
+  assert.doesNotMatch(afterFirst, /still have/);
 });
 
 await check('a failed rename does not rename the game they are playing', () => {

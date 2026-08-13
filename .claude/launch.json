@@ -10,6 +10,15 @@
       ],
       "port": 3000,
       "autoPort": true
+    },
+    {
+      "name": "gba-integration",
+      "runtimeExecutable": "sh",
+      "runtimeArgs": [
+        "-c",
+        "cd /Users/yit/gameboy-gba && npm run dev -- --port 3200"
+      ],
+      "port": 3200
     }
   ]
 }

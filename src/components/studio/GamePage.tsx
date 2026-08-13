@@ -39,6 +39,7 @@ interface GameView {
   understood: string[];
   couldNotDo: string[];
   changes: ChangeView[];
+  problem: string | null;
   canUndo: boolean;
   updatedAt: string | null;
 }
@@ -144,11 +145,20 @@ export function GamePage({ id }: { id: string }) {
             ? view.playUrl
               ? 'Making your change. Keep playing — this one stays until the new one works.'
               : 'Making it. This takes a moment.'
-            : view.status === 'failed' && view.playUrl
-              ? 'That change did not work out. This is the version you had.'
+            : view.status === 'failed'
+              ? 'Not applied'
               : 'Made for you'}
         </p>
       </header>
+
+      {view.problem ? (
+        <p
+          className="mb-3 rounded-md border border-red-500/30 bg-red-500/5 px-3 py-2 text-xs text-red-300"
+          data-testid="problem"
+        >
+          {view.problem}
+        </p>
+      ) : null}
 
       {view.playUrl ? (
         <HostedPlayer key={view.playUrl} game={asHostedGame(view, view.playUrl)} />
@@ -161,7 +171,7 @@ export function GamePage({ id }: { id: string }) {
               <i />
             </span>
             <span className="text-xs tracking-widest text-faint uppercase">
-              {view.status === 'failed' ? 'It did not work' : 'Making it'}
+              {view.status === 'failed' ? 'Nothing to play' : 'Making it'}
             </span>
           </span>
         </div>

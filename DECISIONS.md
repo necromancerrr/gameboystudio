@@ -1212,3 +1212,63 @@ Consequences:
   pointer exists at all.
 - Nothing here is publishing. There is no discovery, no listing, and no way for
   a generated game to appear to anyone who was not given the link.
+
+## D-028: The Model Writes The Game
+
+Status: Accepted 2026-08-12
+
+Decision:
+`claude-opus-5` behind the `GameGenerator` interface, writing the game's
+TypeScript source directly against the SDK. The synthesizer stays as the
+no-credentials implementation and is what the test suite runs against. Selection
+is by environment: the model when credentials exist, the synthesizer otherwise,
+and `GBS_GENERATOR` overrides both.
+
+Context:
+M7 built the loop around a spec of named knobs and a synthesizer that composed
+games from it. That proved the loop end to end and found its ceiling in the same
+motion: the spec could express five kinds of game, and every request outside
+them was recorded as "not understood". The honest reading of M7_FINDING.md is
+that the format was the bottleneck, not the plumbing.
+
+Reason:
+**A spec cannot be widened into free text.** Each new knob is a new synthesizer
+branch, and the requests people actually make — "a game where you tend a
+lighthouse in a storm" — are not more knobs. Generating source instead moves the
+expressiveness ceiling from what we anticipated to what the SDK can express,
+which is the boundary M6 built for exactly this.
+
+**Capability over cost, for now.** The failure mode that matters at this stage
+is a game that does not work or is dull, not a slightly expensive one. Effort is
+`xhigh`, the documented setting for coding work. This is a decision to revisit
+with usage data, not a permanent position.
+
+**Conformance is what makes it safe.** Nothing about generated source is
+trusted: it compiles, bundles and passes `gbs check` before the pointer moves,
+and a failure leaves the previous version playable (D-024). The model is a
+better author, not a shortcut past the gate.
+
+Consequences:
+- The `kind` field on a spec is now a label rather than a switch. Nothing
+  branches on it, because there is no longer a synthesizer to branch.
+- The SDK contract given to the model is prose, not generated types — the model
+  needs the constraints, not just the shapes. Prose cannot be type-checked, so
+  `verify:forge` asserts every symbol it names is really exported. Renaming an
+  SDK export without updating the guide is a test failure rather than a silent
+  drift into confidently wrong code.
+- The guide is the cached prefix of every request, so nothing per-request may be
+  interpolated above it.
+- `forgeNew` no longer generates twice. It did, harmlessly, to name the project
+  before running the revision; with a real model that is a second paid
+  generation which is not even guaranteed to produce the same game.
+- Requests are logged, successes and failures alike, with the failures carrying
+  the checks that rejected them. This is the research record: the projects on
+  disk only preserve the requests that worked.
+- The test suite must never need a key. Without credentials the synthesizer runs
+  the whole loop for free, and `GBS_GENERATOR=synthesizer` keeps a developer who
+  has a key from spending it on a test run.
+- Refusals are handled as a clear message rather than with a server-side
+  fallback model. Game generation does not go near the categories the
+  classifiers target, and the plumbing would sit on top of streaming and
+  structured outputs for a case that should not arise. If it does arise in
+  practice, `fallbacks` is the fix.

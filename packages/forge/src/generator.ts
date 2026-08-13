@@ -1,15 +1,25 @@
 /**
- * Where a model would go.
+ * Where the model goes.
  *
- * D-025: the boundary is built, the model is not chosen. Two implementations —
- * a synthesizer that costs nothing, and a model-backed one that is deliberately
- * absent. Swapping in a model must change only this file's implementations, and
- * that is a verification item rather than an intention.
+ * D-025 built this boundary and left the model unchosen. D-028 chose it, and
+ * the promise held: swapping a real model in changed only what is behind this
+ * interface. The loop, the project model, the conformance gate and the pointer
+ * rule are all untouched.
+ *
+ * Two implementations remain, and both are real. The synthesizer composes games
+ * from a spec of named knobs — it costs nothing, needs no network, and is what
+ * the tests run against, so the suite never depends on a paid service. The
+ * model writes the source itself, which is what lets someone ask for a game in
+ * their own words rather than in the five shapes a spec can express.
  */
 
 import type { GameSpec } from './project.js';
 import { applyChange, specFromRequest } from './spec.js';
 import { synthesize } from './synthesize.js';
+import { ModelGenerator } from './model.js';
+
+export { ModelGenerator } from './model.js';
+export { MODEL } from './model.js';
 
 export interface Proposal {
   spec: GameSpec;
@@ -69,29 +79,25 @@ export class Synthesizer implements GameGenerator {
   }
 }
 
-/**
- * The model-backed generator.
- *
- * Deliberately not implemented in M7. Provider, cost ceiling and where
- * inference runs are decisions to be made on their own merits, not as a side
- * effect of building the loop.
- */
-export class ModelGenerator implements GameGenerator {
-  readonly name = 'model';
-
-  async propose(): Promise<Proposal> {
-    throw new Error(
-      'No model provider has been chosen yet (D-025). Use the synthesizer, or pick one first.',
-    );
-  }
-
-  async repair(): Promise<Proposal | null> {
-    throw new Error('No model provider has been chosen yet (D-025).');
-  }
-}
-
 export function generatorNamed(name: string): GameGenerator {
   if (name === 'synthesizer') return new Synthesizer();
   if (name === 'model') return new ModelGenerator();
   throw new Error(`Unknown generator "${name}". Known: synthesizer, model.`);
+}
+
+/**
+ * What to use when the caller has not said.
+ *
+ * The model when credentials exist, the synthesizer otherwise. Falling back
+ * rather than failing is deliberate: a machine with no key can still run the
+ * whole loop end to end, which is what keeps the test suite honest and free.
+ * `GBS_GENERATOR` overrides it either way, so a real key never forces a paid
+ * call during a test run.
+ */
+export function defaultGenerator(): GameGenerator {
+  const named = process.env.GBS_GENERATOR;
+  if (named) return generatorNamed(named);
+  const configured =
+    Boolean(process.env.ANTHROPIC_API_KEY) || Boolean(process.env.ANTHROPIC_AUTH_TOKEN);
+  return configured ? new ModelGenerator() : new Synthesizer();
 }

@@ -42,20 +42,56 @@ const QUICK = process.env.GBS_FORGE_FULL_CHECK !== '1';
  */
 const running = new Map<string, ReturnType<typeof spawn>>();
 
+/**
+ * Why a build died before it became a project.
+ *
+ * A conformance failure is recorded on the project as a failed revision, and
+ * the view speaks for it. A generation failure — no credentials, the service
+ * unreachable, a request it declined — happens *before* the project exists, so
+ * there is nothing on disk to ask. Without this the browser polls an id that
+ * returns 404 forever, which reads as a game that vanished.
+ *
+ * In memory on purpose: it describes an attempt, not a game, and a restart
+ * legitimately ends it.
+ */
+const failures = new Map<string, string>();
+
 const FORGE_CLI = path.join(REPO, 'packages/forge/bin/forge.mjs');
+
+/** The last non-empty line the CLI printed — where it puts the reason. */
+function lastLine(output: string): string {
+  const lines = output.trim().split('\n').filter((line) => line.trim().length > 0);
+  return lines[lines.length - 1]?.trim() ?? '';
+}
 
 function runForge(id: string, args: string[]): void {
   const child = spawn(process.execPath, [FORGE_CLI, ...args], {
     cwd: REPO,
     env: { ...process.env, GBS_FORGE_ROOT: FORGE_ROOT, GBS_SDK_PATH: SDK_PATH },
-    stdio: 'ignore',
+    // stderr is kept because it carries the one thing the filesystem cannot:
+    // why a run ended before it wrote anything.
+    stdio: ['ignore', 'ignore', 'pipe'],
     detached: false,
   });
   running.set(id, child);
-  // However it ends, the slot frees. A failed build is recorded on the project
-  // as a failed revision, so there is nothing to report from here.
-  child.on('exit', () => running.delete(id));
-  child.on('error', () => running.delete(id));
+  failures.delete(id);
+
+  let stderr = '';
+  child.stderr?.on('data', (chunk: Buffer) => {
+    // Bounded: a runaway process must not be able to grow this without limit.
+    if (stderr.length < 8_000) stderr += chunk.toString();
+  });
+
+  child.on('exit', (code) => {
+    running.delete(id);
+    if (code !== 0) {
+      failures.set(id, lastLine(stderr) || 'That did not work. Try again in a moment.');
+    }
+  });
+  child.on('error', () => {
+    running.delete(id);
+    failures.set(id, 'The game builder could not be started.');
+  });
 }
 
 const playBase = (id: string) => `/api/games/${id}`;
@@ -68,10 +104,34 @@ export function listGames(): GameSummary[] {
 
 export function getGame(id: string): GameView | null {
   try {
-    return viewOf(Project.open(FORGE_ROOT, id), playBase(id));
+    const view = viewOf(Project.open(FORGE_ROOT, id), playBase(id));
+    // A generation failure on an existing game outranks the recorded status:
+    // the project's newest revision is whatever last succeeded, which would
+    // otherwise report the game as fine while the change they just asked for
+    // is nowhere.
+    const failure = failures.get(id);
+    return failure && view.status !== 'building' ? { ...view, problem: failure } : view;
   } catch {
-    return null;
+    return failedBeforeItStarted(id);
   }
+}
+
+/** There is no project, so everything the view would read is missing. */
+function failedBeforeItStarted(id: string): GameView | null {
+  const problem = failures.get(id);
+  if (!problem) return null;
+  return {
+    id,
+    title: 'That game',
+    status: 'failed',
+    playUrl: null,
+    understood: [],
+    couldNotDo: [],
+    changes: [],
+    problem,
+    canUndo: false,
+    updatedAt: null,
+  };
 }
 
 export function isBuilding(id: string): boolean {
