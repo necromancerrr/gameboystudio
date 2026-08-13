@@ -25,7 +25,7 @@
 
 import Anthropic from '@anthropic-ai/sdk';
 import type { GameSpec } from './project.js';
-import type { GameGenerator, Proposal, RepairContext } from './generator.js';
+import type { GameGenerator, ModelUsage, Proposal, RepairContext } from './generator.js';
 import { SDK_GUIDE } from './sdkGuide.js';
 
 /**
@@ -36,11 +36,13 @@ import { SDK_GUIDE } from './sdkGuide.js';
 export const MODEL = 'claude-opus-5';
 
 /**
- * A whole game is a long single output. Generous enough that a substantial game
- * is never cut off mid-file, which would surface as a syntax error and send a
- * perfectly good attempt into the repair loop for no reason.
+ * `max_tokens` bounds thinking *and* the answer together, and at `xhigh` the
+ * thinking is a large share of it. The first real request proved the point: a
+ * lighthouse game spent seven minutes reasoning and then had no budget left to
+ * write itself, and came back truncated. 64k is the documented floor for this
+ * effort level, and the ceiling is 128k — there is no reason to sail close.
  */
-const MAX_TOKENS = 32_000;
+const MAX_TOKENS = 64_000;
 
 /** Coding work. The documented setting for it, and the loop can afford it. */
 const EFFORT = 'xhigh';
@@ -90,6 +92,11 @@ const PROPOSAL_SCHEMA = {
   required: ['title', 'genre', 'players', 'saves', 'applied', 'ignored', 'source'],
   additionalProperties: false,
 } as const;
+
+interface Answer {
+  proposal: ModelProposal;
+  usage: ModelUsage;
+}
 
 interface ModelProposal {
   title: string;
@@ -207,7 +214,7 @@ neighbourhood — the details in their words are the point.`,
           },
         ];
 
-    const proposal = await this.ask(messages);
+    const { proposal, usage } = await this.ask(messages);
 
     return {
       spec: {
@@ -224,11 +231,12 @@ neighbourhood — the details in their words are the point.`,
       source: proposal.source,
       applied: proposal.applied,
       ignored: proposal.ignored,
+      usage,
     };
   }
 
   async repair(context: RepairContext): Promise<Proposal | null> {
-    const proposal = await this.ask([{ role: 'user', content: repairBrief(context) }]);
+    const { proposal, usage } = await this.ask([{ role: 'user', content: repairBrief(context) }]);
     return {
       // The spec is the one that was already agreed. A repair fixes the code;
       // it must not quietly rename the game or change what it declares, because
@@ -237,10 +245,11 @@ neighbourhood — the details in their words are the point.`,
       source: proposal.source,
       applied: proposal.applied,
       ignored: proposal.ignored,
+      usage,
     };
   }
 
-  private async ask(messages: Anthropic.MessageParam[]): Promise<ModelProposal> {
+  private async ask(messages: Anthropic.MessageParam[]): Promise<Answer> {
     let message: Anthropic.Message;
     try {
       // Streamed because a whole game is a large output and a non-streaming
@@ -275,7 +284,15 @@ neighbourhood — the details in their words are the point.`,
     // Structured outputs guarantee the shape, so a parse failure here is a
     // real fault rather than a formatting slip — say so plainly.
     try {
-      return JSON.parse(text.text) as ModelProposal;
+      return {
+        proposal: JSON.parse(text.text) as ModelProposal,
+        usage: {
+          input: message.usage.input_tokens,
+          output: message.usage.output_tokens,
+          cacheRead: message.usage.cache_read_input_tokens ?? 0,
+          cacheWrite: message.usage.cache_creation_input_tokens ?? 0,
+        },
+      };
     } catch {
       throw new Error('The game service returned something unreadable.');
     }

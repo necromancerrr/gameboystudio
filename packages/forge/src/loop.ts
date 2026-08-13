@@ -174,6 +174,7 @@ async function runRevision(
   project.setStatus(revision.n, 'checking');
   let conformance = clock('check', () => runCheck(project, options.sdkPath, options.quick ?? false));
 
+  const calls = proposal.usage ? [proposal.usage] : [];
   let repaired: boolean | undefined;
   if (!conformance.ok) {
     project.setStatus(revision.n, 'repairing');
@@ -184,6 +185,7 @@ async function runRevision(
       details: conformance.checks.filter((c) => !c.ok),
     });
     if (repair) {
+      if (repair.usage) calls.push(repair.usage);
       project.rewrite(revision.n, repair.source);
       conformance = clock('recheck', () => runCheck(project, options.sdkPath, options.quick ?? false));
       repaired = conformance.ok;
@@ -235,6 +237,7 @@ async function runRevision(
     failed: conformance.ok ? [] : conformance.failed,
     repaired,
     timings,
+    calls: calls.length > 0 ? calls : undefined,
   });
 
   return {

@@ -39,6 +39,8 @@ export interface RequestRecord {
   /** Whether a repair attempt was made, and whether it rescued the revision. */
   repaired?: boolean;
   timings: Record<string, number>;
+  /** Model calls made, and what they cost in tokens. Absent for the synthesizer. */
+  calls?: { input: number; output: number; cacheRead: number; cacheWrite: number }[];
   /** Set when the attempt did not get as far as a verdict. */
   error?: string;
 }

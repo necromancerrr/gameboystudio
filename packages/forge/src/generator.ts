@@ -27,6 +27,19 @@ export interface Proposal {
   /** What the request was understood to mean, and what it was not. */
   applied: string[];
   ignored: string[];
+  /**
+   * What the call cost, when a generator makes calls. Absent for the
+   * synthesizer, which makes none.
+   */
+  usage?: ModelUsage;
+}
+
+/** Per-call token counts, as reported by the provider. */
+export interface ModelUsage {
+  input: number;
+  output: number;
+  cacheRead: number;
+  cacheWrite: number;
 }
 
 export interface RepairContext {

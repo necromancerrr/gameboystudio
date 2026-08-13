@@ -32,6 +32,20 @@ Then open http://localhost:3000.
 | `npm run build` | Production build |
 | `npm run verify:catalog` | Boots every ROM, checks input reaches the core, and round-trips every battery save |
 
+## Early-access waitlist
+
+The homepage opens with the early-access landing; the library sits directly
+below it at `#console`. Signups post to `/api/waitlist`, which forwards
+`{ email, source }` to whatever capture service is configured:
+
+| Variable | Required | What it does |
+| --- | --- | --- |
+| `GBS_WAITLIST_ENDPOINT` | yes | POST endpoint that accepts JSON |
+| `GBS_WAITLIST_TOKEN` | no | sent as `Authorization: Bearer …` |
+
+With no endpoint set the API answers `503` and the form says registration is
+not connected yet, rather than reporting a signup that was never stored.
+
 ## Saves
 
 Games with battery-backed cartridge RAM save automatically; a brief "saved"
