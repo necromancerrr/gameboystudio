@@ -1,5 +1,7 @@
 import Link from 'next/link';
+import type { CSSProperties } from 'react';
 import type { Game } from '@/catalog';
+import { screenAspect } from '@/emulation/core/types';
 import { GameThumb } from '@/components/GameThumb';
 
 /**
@@ -13,7 +15,12 @@ export function GameCard({ game, priority = false }: { game: Game; priority?: bo
       href={`/games/${game.slug}`}
       className="group block rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-lcd"
     >
-      <div className="aspect-gb relative overflow-hidden rounded-lg border border-hairline bg-black transition-colors group-hover:border-hairline-strong">
+      <div
+        // A GBA tile is 3:2 and a Game Boy tile is 10:9. Framing both at the
+        // Game Boy ratio would crop every GBA screenshot.
+        style={{ '--gbs-screen-aspect': screenAspect(game.console) } as CSSProperties}
+        className="aspect-gb relative overflow-hidden rounded-lg border border-hairline bg-black transition-colors group-hover:border-hairline-strong"
+      >
         <GameThumb game={game} priority={priority} />
         {/* One badge slot, two meanings: which console a game came from, or
             that it came from us. */}

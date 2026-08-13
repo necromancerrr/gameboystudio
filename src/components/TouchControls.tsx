@@ -43,6 +43,11 @@ export interface TouchControlsProps {
   onButton: (button: LogicalButton, pressed: boolean) => void;
   /** Called when every touch is released, so the router can clear the source. */
   onReleaseAll: () => void;
+  /**
+   * Shows the L and R shoulders. Off by default: Game Boy has no shoulders, and
+   * two dead buttons on a phone screen is worse than none.
+   */
+  shoulders?: boolean;
   haptics?: boolean;
   className?: string;
 }
@@ -50,6 +55,7 @@ export interface TouchControlsProps {
 export function TouchControls({
   onButton,
   onReleaseAll,
+  shoulders = false,
   haptics = true,
   className = '',
 }: TouchControlsProps) {
@@ -246,6 +252,35 @@ export function TouchControls({
       className={`touch-deck ${className}`}
       aria-hidden="true"
     >
+      {/* Shoulders sit above the thumb clusters, on the edge nearest the index
+          fingers, and only exist for consoles that have them. */}
+      {shoulders ? (
+        <div className="touch-deck__shoulders">
+          <button
+            type="button"
+            tabIndex={-1}
+            data-control="l"
+            data-kind="pill"
+            data-button="l"
+            data-down="false"
+            className="touch-btn touch-btn--pill touch-btn--shoulder"
+          >
+            L
+          </button>
+          <button
+            type="button"
+            tabIndex={-1}
+            data-control="r"
+            data-kind="pill"
+            data-button="r"
+            data-down="false"
+            className="touch-btn touch-btn--pill touch-btn--shoulder"
+          >
+            R
+          </button>
+        </div>
+      ) : null}
+
       {/* Actions on the left, D-pad on the right. The pair sits in one housing
           so it reads as a single control, not two floating circles. */}
       <div className="touch-deck__cluster touch-deck__cluster--left">

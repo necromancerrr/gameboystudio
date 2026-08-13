@@ -23,6 +23,7 @@ import type { FramePort } from './FramePort';
 import {
   FRAME_PROTOCOL_VERSION,
   parseFrameMessage,
+  toGbsButton,
   type FrameMessage,
 } from './frameProtocol';
 
@@ -110,7 +111,12 @@ export class HostedGameAdapter {
     // Deliberately not gated on `started`: input binds before the game is ready
     // in the other two runtimes too, so a button held during load is not lost.
     if (this.destroyed) return;
-    this.port.post({ t: 'input', player, button, pressed });
+    // Hosted games speak the SDK's eight-button vocabulary. A shoulder press
+    // from a pad has no meaning there and is dropped rather than sent as a
+    // button the game cannot decode.
+    const gbs = toGbsButton(button);
+    if (!gbs) return;
+    this.port.post({ t: 'input', player, button: gbs, pressed });
   }
 
   setMuted(muted: boolean): void {
