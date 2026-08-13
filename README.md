@@ -34,9 +34,10 @@ Then open http://localhost:3000.
 
 ## Early-access waitlist
 
-The homepage opens with the early-access landing; the library sits directly
-below it at `#console`. Signups post to `/api/waitlist`, which forwards
-`{ email, source }` to whatever capture service is configured:
+The early-access landing lives at `/early-access`, linked from the library
+header. `/` stays the library: the games here already play, so nothing gates
+them. Signups post to `/api/waitlist`, which forwards `{ email, source }` to
+whatever capture service is configured:
 
 | Variable | Required | What it does |
 | --- | --- | --- |
