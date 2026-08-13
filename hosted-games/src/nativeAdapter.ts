@@ -13,7 +13,25 @@
  */
 
 import type { NativeGame, InputSnapshot, PlayerInput, AudioHost } from '@/native/types';
-import type { HostedGameContext, HostedGameDefinition, HostedInput } from '@gameboystudio/sdk';
+import { GBS_BUTTONS } from '@gameboystudio/sdk';
+import type {
+  GbsButton,
+  HostedGameContext,
+  HostedGameDefinition,
+  HostedInput,
+} from '@gameboystudio/sdk';
+
+/**
+ * A native game may ask about any platform button, which since Game Boy Advance
+ * includes the shoulders (D-026). The hosted frame only knows the SDK's eight,
+ * so a shoulder is reported unheld rather than passed through as a button the
+ * host cannot answer.
+ */
+function asGbsButton(button: string): GbsButton | null {
+  return (GBS_BUTTONS as readonly string[]).includes(button)
+    ? (button as GbsButton)
+    : null;
+}
 
 /** Bridges the hosted input shape to the one native games read. */
 function snapshotFor(input: HostedInput, players: number): InputSnapshot {
@@ -23,8 +41,14 @@ function snapshotFor(input: HostedInput, players: number): InputSnapshot {
     player(index: number): PlayerInput {
       if (index < 0 || index >= players) return absent;
       return {
-        held: (button) => input.held(index, button),
-        pressed: (button) => input.pressed(index, button),
+        held: (button) => {
+          const gbs = asGbsButton(button);
+          return gbs ? input.held(index, gbs) : false;
+        },
+        pressed: (button) => {
+          const gbs = asGbsButton(button);
+          return gbs ? input.pressed(index, gbs) : false;
+        },
       };
     },
   };

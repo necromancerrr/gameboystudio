@@ -31,6 +31,11 @@ const BUTTON_INDEXES: Record<LogicalButton, readonly number[]> = {
   b: [0], // south
   start: [9], // Start / Menu / Options / Plus
   select: [8], // Back / Share / View / Minus
+  // Shoulders, for Game Boy Advance. Both the bumper and the trigger on each
+  // side map to the same button: GBA has one shoulder per side, and which of
+  // the two a player reaches for is a matter of pad and habit.
+  l: [4, 6],
+  r: [5, 7],
 };
 
 const AXIS_X = 0;

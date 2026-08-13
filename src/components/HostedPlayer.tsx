@@ -4,7 +4,7 @@
  * React shell for a hosted game.
  *
  * A sibling of `NativePlayer` for the same reason that one is a sibling of
- * `GameBoyPlayer`: the value is in sharing the input layer, the save store and
+ * `RetroPlayer`: the value is in sharing the input layer, the save store and
  * the room, not in one component that knows three runtimes. What differs here
  * is only where the game lives — behind a sandboxed frame instead of on our own
  * canvas — and the player is not supposed to be able to tell (D-014).

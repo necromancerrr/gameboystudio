@@ -7,6 +7,9 @@ const eslintConfig = defineConfig([
   ...nextTs,
   // Override default ignores of eslint-config-next.
   globalIgnores([
+    // Vendored emulator cores: minified Emscripten glue, not our source. Half a
+    // dozen rules fire on it and none of them mean anything here (D-006, D-026).
+    "public/emulator/**",
     // Default ignores of eslint-config-next:
     ".next/**",
     "out/**",

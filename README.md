@@ -5,6 +5,10 @@ immediately — no ROM upload, no plugin, keyboard or controller.
 
 **Live: https://gameboy-jet.vercel.app**
 
+> **Deploying?** Read RELEASE_GBA.md first. The hosted-games Worker must be
+> deployed before the app, and `npm run hosted:deploy` is not safe to run on its
+> own — it uploads a build directory that does not match production.
+
 ## Status
 
 The core loop works: **discover → open → connect controller → play**.
@@ -34,9 +38,10 @@ Then open http://localhost:3000.
 
 ## Early-access waitlist
 
-The homepage opens with the early-access landing; the library sits directly
-below it at `#console`. Signups post to `/api/waitlist`, which forwards
-`{ email, source }` to whatever capture service is configured:
+The early-access landing lives at `/early-access`, linked from the library
+header. `/` stays the library: the games here already play, so nothing gates
+them. Signups post to `/api/waitlist`, which forwards `{ email, source }` to
+whatever capture service is configured:
 
 | Variable | Required | What it does |
 | --- | --- | --- |

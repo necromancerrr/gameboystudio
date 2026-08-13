@@ -1,49 +1,57 @@
-import { WaitlistLanding } from '@/components/WaitlistLanding';
+import Link from 'next/link';
 import { ContinueShelf } from '@/components/ContinueShelf';
 import { StudioHome } from '@/components/studio/Home';
 import { GameLibrary } from '@/components/GameLibrary';
 import { getAllGames, getConsoles } from '@/catalog';
-import styles from '@/components/WaitlistLanding.module.css';
 
-export default function HomePage() {
+export default function LibraryPage() {
   const games = getAllGames();
 
   return (
-    <main className="flex-1">
-      <WaitlistLanding />
-
-      {/* The library the landing points at. Same page, same scroll — the
-          Instant Contract still holds, so nothing here waits on the pitch. */}
-      <section id="console" className={styles.library}>
-        <div className={styles.libraryHeader}>
-          <div>
-            <p className={styles.eyebrow}>THE CONSOLE IS ALREADY ON</p>
-            <h2>Ask for a game, or play one that is already here.</h2>
-          </div>
-          <span>{games.length} GAMES / LIVE NOW</span>
+    <div className="mx-auto w-full max-w-6xl flex-1 px-5 py-6 sm:px-8 sm:py-10">
+      {/* Compact on purpose. The previous hero ate most of the first mobile
+          screen and led with redistribution licensing, which no player cares
+          about on arrival. It lives in the footer and on each game page. */}
+      <header className="mb-4 flex items-start justify-between gap-4 sm:mb-6">
+        <div>
+          <h1 className="text-xl font-semibold tracking-tight sm:text-2xl">
+            GameBoyStudio
+          </h1>
+          <p className="mt-1 text-sm text-muted">
+            {games.length} small games that start the moment you tap. Keyboard,
+            controller, or right here on your phone.
+          </p>
         </div>
 
-        {/* Where the pitch above becomes something you can use: that one asks
-            for an email, this asks for a game and hands one back. The ask is
-            the entry to the loop, so it leads the live section rather than
-            sitting inside the marketing.
+        {/* The pitch for what is not built yet lives on its own page. The
+            games here already play, so nothing gates the library. */}
+        <Link
+          href="/early-access"
+          className="shrink-0 rounded-full border border-hairline px-3 py-1.5 text-xs text-muted transition-colors hover:border-lcd-deep hover:text-lcd"
+        >
+          Early access
+        </Link>
+      </header>
 
-            Everything below it is ranked rather than positioned — the catalog
-            leads a first visit and recedes once someone has games of their own,
-            and Continue outranks both for a returning player. Handing the two
-            shelves in as props keeps that ordering in one small file instead of
-            in this markup. See components/studio/shelves.ts. */}
-        <StudioHome
-          continueShelf={<ContinueShelf />}
-          library={<GameLibrary games={games} consoles={getConsoles()} />}
-        />
+      {/* The ask leads: it is the entry to the loop, and asking for a game is
+          the one thing here the header above only promises.
 
-        <footer className="mt-16 border-t border-hairline pt-6 text-xs text-faint">
-          Every game here is published by its author under a license that permits
-          redistribution. Each game page credits its creator and states its
-          license.
-        </footer>
-      </section>
-    </main>
+          Everything below it is ranked rather than positioned — the catalog
+          leads a first visit and recedes once someone has games of their own,
+          and Continue outranks both for a returning player ("resume", not "find
+          something new"). Handing the two shelves in as props keeps that
+          ordering in one small file instead of in this markup. See
+          components/studio/shelves.ts. */}
+      <StudioHome
+        continueShelf={<ContinueShelf />}
+        library={<GameLibrary games={games} consoles={getConsoles()} />}
+      />
+
+      <footer className="mt-16 border-t border-hairline pt-6 text-xs text-faint">
+        Every game here is published by its author under a license that permits
+        redistribution. Each game page credits its creator and states its
+        license.
+      </footer>
+    </div>
   );
 }

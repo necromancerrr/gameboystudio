@@ -64,6 +64,20 @@ export default {
     // else is locked down.
     headers.set('x-content-type-options', 'nosniff');
     headers.set('referrer-policy', 'no-referrer');
+    /**
+     * The application became cross-origin isolated when Game Boy Advance
+     * arrived (D-026), and an isolated document will not load a cross-origin
+     * resource that has not opted in. These two headers are that opt-in: CORP
+     * lets our pages fetch the manifest and the game files, and COEP lets the
+     * game frame itself be embedded.
+     *
+     * This origin serves only public, read-only, already-CORS-open files, so
+     * neither header gives anything away. **Deploying the app without
+     * deploying this Worker breaks every hosted game**, which is the one
+     * ordering constraint worth remembering here.
+     */
+    headers.set('cross-origin-resource-policy', 'cross-origin');
+    headers.set('cross-origin-embedder-policy', 'require-corp');
 
     return new Response(response.body, { status: response.status, headers });
   },
