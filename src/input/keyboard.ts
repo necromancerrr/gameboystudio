@@ -33,6 +33,10 @@ export const DEFAULT_CODE_MAP: Readonly<Record<string, LogicalButton>> = {
   Enter: 'start',
   ShiftLeft: 'select',
   ShiftRight: 'select',
+  // Shoulders, for Game Boy Advance. Q and E flank WASD, so a hand already on
+  // the movement keys can reach them, and neither collides with Z/X.
+  KeyQ: 'l',
+  KeyE: 'r',
 };
 
 /** Matched against `event.key`, lowercased — the character produced. */
@@ -49,6 +53,8 @@ export const DEFAULT_KEY_MAP: Readonly<Record<string, LogicalButton>> = {
   z: 'b',
   enter: 'start',
   shift: 'select',
+  q: 'l',
+  e: 'r',
 };
 
 /**

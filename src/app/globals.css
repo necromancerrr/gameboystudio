@@ -45,9 +45,11 @@ body {
   color: var(--gbs-text);
 }
 
-/* Game Boy output is 160x144. Every screen-derived image keeps that ratio. */
+/* Game Boy output is 160x144, Game Boy Advance 240x160 — 10:9 against 3:2, so
+   this cannot be one number. The default is the Game Boy's; anything showing a
+   GBA screen sets --gbs-screen-aspect. */
 .aspect-gb {
-  aspect-ratio: 10 / 9;
+  aspect-ratio: var(--gbs-screen-aspect, 10 / 9);
 }
 
 /* Screenshots are tiny pixel art; never let the browser smooth them. */
@@ -282,7 +284,7 @@ body {
 .handheld__screen {
   display: block;
   image-rendering: pixelated;
-  aspect-ratio: 10 / 9;
+  aspect-ratio: var(--gbs-screen-aspect, 10 / 9);
   width: 100%;
   height: auto;
   max-height: 100%;
@@ -416,6 +418,23 @@ body {
   display: flex;
   justify-content: center;
   gap: 1rem;
+}
+
+/* Shoulders span the deck and sit above the thumb clusters, pushed to the outer
+   edges — the same relationship they have to the thumbs on real hardware.
+   Only rendered for consoles that have them (Game Boy Advance). */
+.touch-deck__shoulders {
+  grid-column: 1 / -1;
+  display: flex;
+  justify-content: space-between;
+  padding: 0 0.5rem;
+}
+
+/* Upright and wider than Start/Select: these are held, not tapped. */
+.touch-btn--shoulder {
+  transform: none;
+  min-width: 88px;
+  letter-spacing: 0.2em;
 }
 
 @media (orientation: landscape) {

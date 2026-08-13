@@ -39,7 +39,7 @@ const failures = [];
  * can drift apart in data. Nothing at runtime would notice — the game would
  * simply be labelled wrong in the library — so it is asserted here.
  */
-const CONSOLE_FOR_RUNTIME = { gb: 'GB', gbc: 'GBC', native: null };
+const CONSOLE_FOR_RUNTIME = { gb: 'GB', gbc: 'GBC', gba: 'GBA', native: null };
 for (const game of catalog) {
   if (!(game.runtime in CONSOLE_FOR_RUNTIME)) {
     console.log(`  FAIL ${game.slug.padEnd(24)} unknown runtime "${game.runtime}"`);
@@ -50,8 +50,11 @@ for (const game of catalog) {
   }
 }
 
-// Only emulated entries have a ROM to boot. Native games verify themselves.
+// Only Game Boy entries can boot HERE. binjgb is a Game Boy core; a GBA ROM is
+// not a thing it can be asked about, so those are checked separately below
+// rather than quietly skipped.
 const games = catalog.filter((game) => game.runtime === 'gb' || game.runtime === 'gbc');
+const gbaGames = catalog.filter((game) => game.runtime === 'gba');
 
 for (const game of games) {
   const mod = await sandbox.__Binjgb({ wasmBinary });
@@ -119,9 +122,20 @@ async function screenAfter({ holdStart, installCallback, romPath, warmupSec, hol
   return h;
 }
 
+/**
+ * These read ROMs from disk, not from the catalog, so they went on passing after
+ * the two games they named were cut. Renamed to games that are actually
+ * shipping, and widened from two to four while here.
+ *
+ * maxpirateeb is deliberately absent: its title screen does not respond to
+ * START (A advances it), so it fails a START-only assertion for a reason that
+ * has nothing to do with the joypad callback. Verified by running it here.
+ */
 const INPUT_CASES = [
-  { slug: 'tobutobugirl', romPath: '/roms/tobutobugirl.gb', warmupSec: 12, holdSec: 4 },
-  { slug: 'snake', romPath: '/roms/snake.gb', warmupSec: 6, holdSec: 4 },
+  { slug: 'tobutobugirldeluxe', romPath: '/roms/tobutobugirldeluxe.gb', warmupSec: 12, holdSec: 4 },
+  { slug: 'crossconnect', romPath: '/roms/crossconnect.gbc', warmupSec: 6, holdSec: 4 },
+  { slug: 'gbhack', romPath: '/roms/gbhack.gbc', warmupSec: 6, holdSec: 4 },
+  { slug: '2048gb', romPath: '/roms/2048gb.gb', warmupSec: 6, holdSec: 4 },
 ];
 
 console.log('\nInput reaching the core:');
@@ -193,5 +207,35 @@ for (const game of games) {
   }
 }
 console.log(`${savePass}/${saveChecked} battery saves round-trip`);
+
+/**
+ * Game Boy Advance ROMs, as far as this harness can go.
+ *
+ * Booting them needs mGBA, which is a browser-only WASM build with a pthread
+ * pool — it cannot run in this Node harness at all. So this asserts the two
+ * things that are checkable here and says plainly that it is not a boot test:
+ * the file exists, and the GBA header's Nintendo logo is intact. A truncated
+ * download or an HTML error page saved as a .gba fails the second one.
+ *
+ * Actually running them is scripts/verify-browser.mjs's job.
+ */
+const GBA_LOGO = '24ffae51699aa221';
+if (gbaGames.length) {
+  console.log('\nGame Boy Advance ROMs (header only — mGBA cannot run here):');
+  let gbaPass = 0;
+  for (const game of gbaGames) {
+    try {
+      const rom = fs.readFileSync(`${REPO}/public${game.entry}`);
+      const logo = Buffer.from(rom.subarray(4, 12)).toString('hex');
+      if (logo !== GBA_LOGO) throw new Error(`bad GBA header (logo ${logo})`);
+      console.log(`  ok   ${game.slug.padEnd(24)} ${(rom.byteLength / 1048576).toFixed(1)}MB`);
+      gbaPass += 1;
+    } catch (error) {
+      console.log(`  FAIL ${game.slug.padEnd(24)} ${error.message}`);
+      failures.push(`${game.slug} (gba header)`);
+    }
+  }
+  console.log(`${gbaPass}/${gbaGames.length} GBA ROMs have a valid header`);
+}
 
 if (failures.length) { console.log('\nfailed:', failures.join(', ')); process.exit(1); }
