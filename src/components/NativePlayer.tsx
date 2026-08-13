@@ -3,7 +3,7 @@
 /**
  * React shell for a GameBoyStudio Original.
  *
- * Deliberately a sibling of GameBoyPlayer rather than a refactor of it. The
+ * Deliberately a sibling of RetroPlayer rather than a refactor of it. The
  * retro player carries every fix from M1 and M2 and there is nothing to gain
  * from reopening it; the two share the input layer, the save store and the
  * activity store, which is where sharing actually pays.

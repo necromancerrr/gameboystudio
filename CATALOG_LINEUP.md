@@ -4,7 +4,12 @@ The catalog audit in CONTENT_RESEARCH.md §1, turned into an actual lineup.
 Applied on `content/catalog-lineup`, off `main`. Not merged — `main` still ships
 the 22-entry catalog.
 
-**22 entries → 15.** Two originals, thirteen emulated (7 GB, 6 GBC).
+**22 entries → 17.** Two originals, fifteen emulated: 7 Game Boy, 6 Game Boy
+Color and 2 Game Boy Advance.
+
+The GBA titles were added in the same pass that integrated the runtime (D-026).
+They are ranked on how good they are, not grouped by console — a player looking
+for something to play does not start by picking hardware.
 
 Featured is expressed as `rank` 0-9, which is what the library grid already
 orders by. No schema field, no component changes, no visual split — putting an
@@ -28,12 +33,12 @@ is deliberately left out of this branch.
 | 8 | **Renegade Rush** | GB | Speed and immediacy — a good contrast against three puzzle games. |
 | 9 | **Max Pirate Extra Boom** | GB | Short, loud, and finishable in one sitting. Good last tile before the fold. |
 
-**Caveat on Aevilia (rank 7).** Its upstream README says the codebase is no
-longer maintained and a rewrite is in progress; `verify:catalog` proves it boots,
-responds to input and round-trips a 128K save, none of which proves there is a
-finished game behind the character-select screen. **Someone should play it for
-twenty minutes before this ships.** If it turns out to be a vertical slice, it
-drops to the library and Flooder moves up.
+**Aevilia: checked, kept.** Its upstream README says the codebase is abandoned
+mid-rewrite, so a sanity check was run rather than trusting the boot test: mash
+START and A through the intro, then walk. The screen changes on every press —
+dialogue is advancing, not looping — and walking down leaves the 4-colour intro
+for a 17-colour overworld. There is a game behind the character select. Not a
+full playthrough, and not claimed as one.
 
 ## Library (ranks 10-14)
 

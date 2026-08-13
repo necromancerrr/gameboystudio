@@ -15,7 +15,7 @@ export { CONSOLE_LABELS } from './types';
  * have classified hosted games as Game Boy ROMs and handed them to binjgb.
  */
 export function isRetro(game: Game): game is RetroGame {
-  return game.runtime === 'gb' || game.runtime === 'gbc';
+  return game.runtime === 'gb' || game.runtime === 'gbc' || game.runtime === 'gba';
 }
 
 /** A verified gameplay loop. Only games that earned one appear here. */
@@ -52,7 +52,8 @@ export function getGamesByConsole(console: ConsoleId): Game[] {
 
 /** Console ids present in the catalog, in display order. */
 export function getConsoles(): ConsoleId[] {
-  const order: ConsoleId[] = ['GB', 'GBC'];
+  // Chronological, which is also roughly "how different does this look".
+  const order: ConsoleId[] = ['GB', 'GBC', 'GBA'];
   return order.filter((id) => GAMES.some((game) => game.console === id));
 }
 

@@ -16,10 +16,10 @@ a catalog entry — D-008 and D-012 both apply unchanged.
 
 | Title | Author | Licence | Platform | Audit still required |
 |---|---|---|---|---|
-| **Skyland** | evanbowman | MPL-2.0 | GBA | Walk the asset tree. Repo is MPL at the root; music and art authorship unconfirmed. Best single title in reach. |
-| **The Purple Night** | Corwin & Gwilym Kuiper | MPL-2.0 | GBA | Example music is Josh Woodward CC-BY-4.0 per the agb README; confirm nothing else crept in. Already boots and plays here. |
-| **The Hat Chooses the Wizard** | Corwin & Gwilym Kuiper | MPL-2.0 | GBA | As above. |
-| **MeteoRain** | Dr. Ludos | MIT | GBA | Small, and the music is credited to WARLORD on the title screen — that credit needs a licence behind it. |
+| ~~**Skyland**~~ | evanbowman | MPL-2.0 | GBA | **Audited, held back.** The repo documents its assets well, which is how this surfaced: the Maryland font is a commercial licence purchased by the author personally, and the music is PD Info tracks licensed to him by name. Neither is obviously ours to redistribute. Moved to tier 2 — one email would probably settle it. |
+| ✅ **The Purple Night** | Corwin & Gwilym Kuiper | MPL-2.0 | GBA | **Shipped.** MPL-2.0 repo, music by Sam Williams committed to it as a credited contributor. |
+| ✅ **The Hat Chooses the Wizard** | Corwin & Gwilym Kuiper | MPL-2.0 | GBA | **Shipped.** |
+| ~~**MeteoRain**~~ | Dr. Ludos | MIT | GBA | **Audited, held back.** Code is MIT; the title screen credits "music by WARLORD" and no licence for it is recorded anywhere. |
 
 **The audit is not a formality.** Reading the credits files turned up three
 otherwise-perfect GBA titles whose *code* is permissive and whose *music* is
@@ -33,6 +33,7 @@ Ordered by expected value, not by ease.
 
 | Who | What to ask for | Why they might say yes |
 |---|---|---|
+| **evanbowman** (Skyland) | Confirmation that the font and music licences cover redistribution of the ROM by others | He already distributes the ROM publicly and licensed the assets deliberately. Probably a yes, and it is the best GBA game in reach. |
 | **Rik Nicol & Jeremy Clarke (exelotl)**, Goodboy Galaxy Ltd | Host the existing free demo, instant-play, with a buy link | The demo already exists to sell the full game; we would make it playable without a download or an emulator. Highest-profile modern GBA game there is. |
 | **Corwin & Gwilym Kuiper** (setsquare / LostImmortal) | Dungeon Tactics Advance, The Dungeon Puzzler's Lament, Hyperspace Roll, Khiera's Quest | Two of their games are *already* MPL-2.0 in the agb repo, so they have shown what they think of open licensing. Friendliest ask on the list, and it comes with four titles. |
 | **afska** (BeatBeast) | Relicensed or replaced audio for a hosted build | Code is already MIT and he open-sources everything; the blocker is Synthenia's CC-BY-NC music, not him. GBA Jam 2024 winner. |
@@ -74,8 +75,9 @@ decision, not a content one, and it should get a decision record.
 
 ## What this adds up to
 
-The GBA library reachable without asking anyone is **four titles**, one of which
-(Skyland) is genuinely substantial. That is not a console launch. GBA becomes
+The GBA library reachable without asking anyone turned out to be **two titles**,
+not four: the audit removed Skyland and MeteoRain. Both survivors shipped. That
+is a foothold, not a console launch. GBA becomes
 worth shipping only if tier 2 lands — and the single ask that would change the
 picture is Goodboy Galaxy.
 

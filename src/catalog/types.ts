@@ -8,7 +8,7 @@ import type { ConsoleId } from '@/emulation/core/types';
  * they arrive at runtime through the manifest (D-018), so this union is the one
  * place the two catalogs meet.
  */
-export type GameRuntime = 'gb' | 'gbc' | 'native' | 'hosted';
+export type GameRuntime = 'gb' | 'gbc' | 'gba' | 'native' | 'hosted';
 
 /**
  * The platform input vocabulary, narrowed to the profiles something in the
@@ -69,9 +69,10 @@ export interface Game {
  * component keep a non-null console. `npm run verify:catalog` asserts the
  * runtime and console agree, so the narrowing cannot become a lie in data.
  */
-export type RetroGame = Game & { runtime: 'gb' | 'gbc'; console: ConsoleId };
+export type RetroGame = Game & { runtime: 'gb' | 'gbc' | 'gba'; console: ConsoleId };
 
 export const CONSOLE_LABELS: Record<ConsoleId, string> = {
   GB: 'Game Boy',
   GBC: 'Game Boy Color',
+  GBA: 'Game Boy Advance',
 };

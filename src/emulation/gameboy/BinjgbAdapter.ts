@@ -39,7 +39,13 @@ type JoypadSetter = keyof Pick<
   | '_set_joyp_select'
 >;
 
-const JOYPAD_SETTERS: Record<LogicalButton, JoypadSetter> = {
+/**
+ * Partial because the logical button set is the platform's, not the Game Boy's:
+ * it carries L and R for Game Boy Advance. A GB game simply has nowhere to send
+ * them, so setButton drops them rather than the input layer having to know
+ * which console it is talking to.
+ */
+const JOYPAD_SETTERS: Partial<Record<LogicalButton, JoypadSetter>> = {
   up: '_set_joyp_up',
   down: '_set_joyp_down',
   left: '_set_joyp_left',
@@ -243,6 +249,9 @@ export class BinjgbAdapter implements EmulatorAdapter {
   setButton(button: LogicalButton, pressed: boolean): void {
     if (!this.module || !this.handle) return;
     const setter = JOYPAD_SETTERS[button];
+    // L and R reach here on a Game Boy game whenever someone presses a shoulder.
+    // There is no joypad line for them; dropping is the correct behaviour.
+    if (!setter) return;
     this.module[setter](this.handle, pressed ? 1 : 0);
   }
 

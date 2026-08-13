@@ -1120,6 +1120,61 @@ Consequences:
 - Provider, cost ceiling and where inference runs are decided later, on their
   own merits, rather than as a side effect of building the loop.
 
+## D-026: Game Boy Advance, Behind The Same Boundary
+
+Status: Accepted — integrated and verified 2026-08-12
+
+Decision:
+Support Game Boy Advance using mGBA (MPL-2.0) compiled to WebAssembly, behind
+the D-005 adapter boundary, as a third runtime alongside `gb` and `gbc` — not as
+a second player, a second catalog, or a console-first navigation.
+
+Context:
+CONTENT_RESEARCH.md found the Game Boy catalog was thinner than it looked and
+that GBA was the only nearby console with genuinely strong permissively licensed
+homebrew. GBA_SPIKE.md proved the core runs before any of this was built.
+
+Consequences, in rough order of how much they cost:
+
+- **The app is now cross-origin isolated, site-wide.** The mGBA build uses
+  pthreads, so it needs SharedArrayBuffer, so the document needs COOP+COEP.
+  Scoping that to the player route is impossible: hosted games and GBA games are
+  both `/games/[slug]`. So every cross-origin subresource must now opt in. The
+  only one we have is the hosted-games origin (D-019), which now sets CORP and
+  COEP on its own responses. **Deploying the app without deploying that Worker
+  breaks every hosted game.**
+- **`LogicalButton` is ten wide, not eight.** L and R are produced by the
+  keyboard (Q/E) and gamepad (bumpers and triggers) bindings for every console,
+  and dropped by the adapters that have nowhere to send them. The input layer
+  stays console-agnostic, which is what ARCHITECTURE.md asks of it. The touch
+  deck renders shoulders only when the console has them.
+- **The SDK's button vocabulary did not widen with it.** Hosted and native games
+  are authored against eight buttons (D-020, D-021); a shoulder press has no
+  meaning there. The compile-time check that the two vocabularies match is now
+  one-directional, and `toGbsButton` narrows at the boundary.
+- **Screen size comes from the console.** 240x160 is a different aspect ratio
+  (3:2) from the Game Boy's 10:9, so the canvas, the handheld layout and the
+  library tiles all read `--gbs-screen-aspect` instead of assuming.
+- **Saves move to IndexedDB above 64KB.** GBA saves reach 128KB; base64 in
+  localStorage against a ~5MB origin budget would fail exactly when a player's
+  progress is written. Game Boy saves are unchanged. `hasSave` stays synchronous
+  via a marker key, because the Continue shelf asks during render. This
+  supersedes D-013 for large saves.
+- **ROMs are two orders of magnitude bigger.** 64KB median on Game Boy against
+  8MB for The Purple Night. The adapter streams with progress; "play should be
+  immediate" now has a caveat that only measurement on real connections can
+  settle.
+- **`verify:catalog` cannot boot a GBA ROM.** mGBA is browser-only, so the Node
+  harness header-checks GBA entries and says so in its output rather than
+  quietly passing them.
+
+Rejected alternatives:
+NanoBoyAdvance and VBA-M (GPL, disqualifying on the same grounds D-006 used for
+WasmBoy); EmulatorJS (GPLv3, and ships player chrome that fights D-005 and
+D-009). The core is `@thenick775/mgba-wasm`, a fork rather than upstream mGBA,
+whose own WebAssembly port is not expected before 2027 — the same vendoring
+tradeoff D-006 accepted for binjgb, one notch worse.
+
 ## Template For Future Decisions
 
 ### D-XXX: Decision Name

@@ -56,8 +56,8 @@ export async function createMgbaModule(
    * Only `canvas` is passed. `locateFile` is unnecessary — Emscripten resolves
    * the .wasm relative to mgba.js, which already sits beside it.
    */
-  const module = await factory({ canvas });
+  const core = await factory({ canvas });
 
-  await module.FSInit();
-  return module;
+  await core.FSInit();
+  return core;
 }

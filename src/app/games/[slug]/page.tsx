@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 import Image from 'next/image';
 import Link from 'next/link';
 import { HostedGameResolver } from '@/components/HostedGameResolver';
-import { GameBoyPlayer } from '@/components/GameBoyPlayer';
+import { RetroPlayer } from '@/components/RetroPlayer';
 import { NativePlayerMount } from '@/components/NativePlayerMount';
 import {
   CONSOLE_LABELS,
@@ -73,7 +73,7 @@ export default async function GamePage({
 
       <div className="mt-6">
         {isRetro(game) ? (
-          <GameBoyPlayer
+          <RetroPlayer
             source={{
               romUrl: game.entry,
               console: game.console,

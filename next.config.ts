@@ -15,34 +15,38 @@ const nextConfig: NextConfig = {
     return [
       {
         /**
-         * SPIKE ONLY. The mGBA build is a pthreads build, so it needs
-         * SharedArrayBuffer, so the document must be cross-origin isolated.
+         * Cross-origin isolation, site-wide. See D-026.
          *
-         * Scoped to the spike route on purpose. Applying this site-wide would
-         * mean every cross-origin subresource has to opt in with CORP, and the
-         * hosted-games iframe (D-018/D-019) is served from a different origin —
-         * so a global COEP is a decision about the hosted-origin contract, not
-         * a header tweak. See GBA_SPIKE.md.
+         * The mGBA build is a pthreads build: it needs SharedArrayBuffer, which
+         * needs an isolated document. Scoping this to the player route was the
+         * first instinct and does not work — a hosted game and a Game Boy
+         * Advance game are both `/games/[slug]`, so there is no route to scope
+         * it to.
+         *
+         * The cost is real and is paid in one place: every cross-origin
+         * subresource now has to opt in. The only one we have is the hosted
+         * games origin (D-019), which we own, and which sets CORP and COEP on
+         * its own responses to match. A third-party embed added later has to do
+         * the same or it will not load.
          */
-        source: "/spike/gba",
+        source: '/:path*',
         headers: [
-          { key: "Cross-Origin-Opener-Policy", value: "same-origin" },
-          { key: "Cross-Origin-Embedder-Policy", value: "require-corp" },
+          { key: 'Cross-Origin-Opener-Policy', value: 'same-origin' },
+          { key: 'Cross-Origin-Embedder-Policy', value: 'require-corp' },
         ],
       },
       {
         /**
          * The core spawns a pool of pthread workers, each of which re-fetches
-         * mgba.js. A dedicated worker started from a cross-origin-isolated
-         * document must itself be served with COEP, same-origin or not — without
-         * these headers every worker request fails ERR_BLOCKED_BY_RESPONSE and
-         * the module factory simply never resolves. No error, no rejection: the
-         * page sits on "loading" forever. Found the hard way.
+         * mgba.js. A dedicated worker started from an isolated document must
+         * itself be served with COEP, same-origin or not. Without this, every
+         * worker request fails ERR_BLOCKED_BY_RESPONSE and the module factory
+         * never resolves — no error, no rejection, no console output.
          */
-        source: "/emulator/mgba/:path*",
+        source: '/emulator/mgba/:path*',
         headers: [
-          { key: "Cross-Origin-Embedder-Policy", value: "require-corp" },
-          { key: "Cross-Origin-Resource-Policy", value: "same-origin" },
+          { key: 'Cross-Origin-Embedder-Policy', value: 'require-corp' },
+          { key: 'Cross-Origin-Resource-Policy', value: 'same-origin' },
         ],
       },
     ];
