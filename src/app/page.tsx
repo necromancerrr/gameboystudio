@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import { ContinueShelf } from '@/components/ContinueShelf';
 import { GameLibrary } from '@/components/GameLibrary';
 import { getAllGames, getConsoles } from '@/catalog';
@@ -10,14 +11,25 @@ export default function LibraryPage() {
       {/* Compact on purpose. The previous hero ate most of the first mobile
           screen and led with redistribution licensing, which no player cares
           about on arrival. It lives in the footer and on each game page. */}
-      <header className="mb-4 sm:mb-6">
-        <h1 className="text-xl font-semibold tracking-tight sm:text-2xl">
-          GameBoyStudio
-        </h1>
-        <p className="mt-1 text-sm text-muted">
-          {games.length} small games that start the moment you tap. Keyboard,
-          controller, or right here on your phone.
-        </p>
+      <header className="mb-4 flex items-start justify-between gap-4 sm:mb-6">
+        <div>
+          <h1 className="text-xl font-semibold tracking-tight sm:text-2xl">
+            GameBoyStudio
+          </h1>
+          <p className="mt-1 text-sm text-muted">
+            {games.length} small games that start the moment you tap. Keyboard,
+            controller, or right here on your phone.
+          </p>
+        </div>
+
+        {/* The pitch for what is not built yet lives on its own page. The
+            games here already play, so nothing gates the library. */}
+        <Link
+          href="/early-access"
+          className="shrink-0 rounded-full border border-hairline px-3 py-1.5 text-xs text-muted transition-colors hover:border-lcd-deep hover:text-lcd"
+        >
+          Early access
+        </Link>
       </header>
 
       {/* Above search: a returning player's intent is "resume", not "find

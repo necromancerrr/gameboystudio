@@ -1,0 +1,571 @@
+/**
+ * The early-access landing.
+ *
+ * This page runs a heavier, greener treatment than the rest of the site: CRT
+ * bezel, pixel wordmark, phosphor glow. That is deliberate and it is contained
+ * — the landing owns its own route, so none of this leaks into the library or
+ * the player, where D-009's quiet DMG neutrals still hold.
+ */
+
+.shell {
+  --waitlist-scroll: 0;
+  --phosphor: #9bbc0f;
+  --phosphor-dim: #6e8a0c;
+  --page: #050805;
+  --panel: #0a0f0a;
+
+  position: relative;
+  min-height: 100vh;
+  overflow: clip;
+  background:
+    radial-gradient(ellipse at 50% -10%, rgb(155 188 15 / 8%), transparent 55%),
+    radial-gradient(ellipse at 10% 40%, rgb(48 98 48 / 10%), transparent 45%),
+    var(--page);
+  color: var(--gbs-text);
+  font-family: var(--font-geist-mono), monospace;
+}
+
+.noise {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  opacity: 0.03;
+  pointer-events: none;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 120 120' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.92' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.55'/%3E%3C/svg%3E");
+  mix-blend-mode: soft-light;
+}
+
+/* Scroll-linked progress rail, pinned to the left margin. */
+.progress {
+  position: fixed;
+  z-index: 40;
+  top: 50%;
+  left: max(14px, calc((100vw - 1240px) / 2 - 34px));
+  width: 1px;
+  height: min(42vh, 360px);
+  transform: translateY(-50%);
+  pointer-events: none;
+}
+.progressTrack,
+.progressFill,
+.progressLight {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 1px;
+}
+.progressTrack { background: rgb(155 188 15 / 12%); }
+.progressFill {
+  background: linear-gradient(180deg, var(--gbs-lcd-deep), var(--phosphor));
+  transform: scaleY(var(--waitlist-scroll));
+  transform-origin: top;
+  box-shadow: 0 0 14px rgb(155 188 15 / 25%);
+}
+.progressLight {
+  height: 42px;
+  top: calc((100% - 42px) * var(--waitlist-scroll));
+  background: linear-gradient(180deg, transparent, rgb(233 234 231 / 90%), transparent);
+  filter: drop-shadow(0 0 7px var(--phosphor));
+  transition: top 80ms linear;
+}
+
+.container {
+  position: relative;
+  z-index: 2;
+  width: min(100% - 3rem, 1180px);
+  margin: 0 auto;
+}
+
+/* --- Top bar -------------------------------------------------------------- */
+
+.nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 76px;
+}
+
+.brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.7rem;
+  color: var(--gbs-text);
+  text-decoration: none;
+}
+.brandText { display: grid; line-height: 1; }
+.brandText b {
+  font-size: 1.05rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+.brandText span {
+  margin-top: 0.25rem;
+  color: var(--gbs-text-muted);
+  font-size: 0.6rem;
+  letter-spacing: 0.42em;
+}
+.logo { filter: drop-shadow(0 0 10px rgb(155 188 15 / 35%)); }
+
+.power {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+  color: var(--gbs-text-muted);
+  font-size: 0.6rem;
+  letter-spacing: 0.18em;
+}
+.power i {
+  width: 8px;
+  height: 12px;
+  background: var(--phosphor);
+  box-shadow: 0 0 8px rgb(155 188 15 / 45%);
+  animation: powerBar 2.4s steps(1) infinite;
+}
+.power i:nth-of-type(2) { animation-delay: 0.2s; }
+.power i:nth-of-type(3) { animation-delay: 0.4s; }
+.power i:nth-of-type(4) { animation-delay: 0.6s; }
+
+/* --- The travelling light line between every section ---------------------- */
+
+.rule {
+  position: relative;
+  z-index: 2;
+  width: 100%;
+  height: 1px;
+  overflow: hidden;
+  background: linear-gradient(90deg, transparent, rgb(155 188 15 / 16%) 12%, rgb(155 188 15 / 16%) 88%, transparent);
+}
+.rule::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -22%;
+  width: 22%;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--phosphor), #eef3e2, transparent);
+  box-shadow: 0 0 14px rgb(155 188 15 / 65%);
+  animation: lineTravel 6s cubic-bezier(.55, 0, .45, 1) infinite;
+}
+
+/* --- Reveal --------------------------------------------------------------- */
+
+.reveal {
+  opacity: 0;
+  transform: translateY(26px);
+  transition: opacity 720ms cubic-bezier(.2, .8, .2, 1), transform 720ms cubic-bezier(.2, .8, .2, 1);
+}
+.reveal[data-revealed='true'] { opacity: 1; transform: translateY(0); }
+.delayed { transition-delay: 130ms; }
+
+/* --- Hero ----------------------------------------------------------------- */
+
+.hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(360px, 0.95fr);
+  align-items: center;
+  gap: clamp(2.5rem, 6vw, 5rem);
+  padding: clamp(2.5rem, 6vw, 4.5rem) 0 clamp(2rem, 4vw, 3rem);
+}
+
+.eyebrow {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0;
+  color: var(--phosphor);
+  font-size: 0.66rem;
+  letter-spacing: 0.22em;
+}
+
+.headline {
+  margin: 1.35rem 0 1.5rem;
+  font-size: clamp(2.4rem, 4.4vw, 3.5rem);
+  line-height: 1.14;
+  letter-spacing: -0.02em;
+  font-weight: 700;
+}
+.headline em {
+  display: block;
+  color: var(--phosphor);
+  font-style: normal;
+  text-shadow: 0 0 28px rgb(155 188 15 / 30%);
+}
+
+.intro {
+  max-width: 34rem;
+  margin: 0;
+  color: var(--gbs-text-muted);
+  font-size: 0.9rem;
+  line-height: 1.85;
+}
+.intro b { color: var(--phosphor); font-weight: 400; }
+
+/* --- Signup --------------------------------------------------------------- */
+
+.form {
+  max-width: 34rem;
+  margin-top: 2rem;
+  border: 1px solid rgb(155 188 15 / 22%);
+  border-radius: 10px;
+  background: rgb(10 15 10 / 70%);
+  box-shadow: inset 0 0 30px rgb(0 0 0 / 45%);
+}
+.formRow {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.55rem 0.55rem 0.55rem 0.95rem;
+}
+.formRow svg { color: var(--gbs-text-faint); }
+.formRow input {
+  min-width: 0;
+  padding: 0.8rem 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--gbs-text);
+  font: inherit;
+  font-size: 0.82rem;
+}
+.formRow input::placeholder { color: var(--gbs-text-faint); }
+.formRow button {
+  padding: 0.85rem 1.05rem;
+  border: 0;
+  border-radius: 7px;
+  background: var(--phosphor);
+  color: #071006;
+  font-family: inherit;
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  white-space: nowrap;
+  cursor: pointer;
+  box-shadow: 0 0 22px rgb(155 188 15 / 22%);
+  transition: transform 150ms ease, filter 150ms ease;
+}
+.formRow button:hover:not(:disabled) { transform: translateY(-1px); filter: brightness(1.1); }
+.formRow button:disabled { opacity: 0.7; cursor: default; }
+
+.status {
+  margin: 0;
+  padding: 0.7rem 0.95rem;
+  border-top: 1px solid rgb(155 188 15 / 14%);
+  color: var(--gbs-text-faint);
+  font-size: 0.62rem;
+  line-height: 1.6;
+}
+.form[data-state='success'] .status { color: var(--phosphor); }
+.form[data-state='error'] .status { color: #dba45b; }
+
+/* A real number from the catalog, linking to games that already play. The
+   usual "N players joined" counter here would be invented. */
+.proof {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.7rem;
+  margin-top: 1.5rem;
+  padding: 0.6rem 1rem 0.6rem 0.7rem;
+  border: 1px solid rgb(155 188 15 / 18%);
+  border-radius: 999px;
+  color: var(--gbs-text-muted);
+  font-size: 0.62rem;
+  letter-spacing: 0.12em;
+  text-decoration: none;
+  transition: border-color 160ms ease, color 160ms ease;
+}
+.proof:hover { border-color: var(--phosphor); color: var(--gbs-text); }
+.proof b { color: var(--phosphor); font-weight: 700; }
+.proofDot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--phosphor);
+  box-shadow: 0 0 10px var(--phosphor);
+  animation: pulse 1.8s ease-in-out infinite;
+}
+
+/* --- The console ---------------------------------------------------------- */
+
+.console {
+  justify-self: end;
+  width: 100%;
+  max-width: 500px;
+  padding: 0.9rem 0.9rem 1.5rem;
+  border: 1px solid #2c322c;
+  border-radius: 16px;
+  background: linear-gradient(160deg, #23282300 0%, #1a1f1a 12%, #10140f 100%), #14180f;
+  box-shadow:
+    0 40px 90px rgb(0 0 0 / 55%),
+    inset 0 1px 0 rgb(255 255 255 / 7%),
+    inset 0 -2px 6px rgb(0 0 0 / 60%);
+}
+.consoleCap {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0 0.3rem 0.7rem;
+  color: var(--gbs-text-muted);
+  font-size: 0.58rem;
+  letter-spacing: 0.16em;
+}
+.consoleLed {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #d24b3a;
+  box-shadow: 0 0 9px rgb(210 75 58 / 80%);
+  animation: pulse 2.6s ease-in-out infinite;
+}
+.screen {
+  position: relative;
+  overflow: hidden;
+  aspect-ratio: 16 / 9;
+  border: 2px solid #0a0d0a;
+  border-radius: 6px;
+  background: #050a05;
+  box-shadow: inset 0 0 60px rgb(0 0 0 / 85%), inset 0 0 0 1px rgb(155 188 15 / 8%);
+}
+.screen video {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: contain;
+}
+.scan {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: repeating-linear-gradient(180deg, transparent 0 2px, rgb(0 0 0 / 22%) 2px 3px);
+}
+.glare {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(ellipse at 50% 0%, rgb(155 188 15 / 10%), transparent 60%);
+}
+.screen::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -24%;
+  width: 18%;
+  background: linear-gradient(90deg, transparent, rgb(155 188 15 / 8%), rgb(233 234 231 / 9%), transparent);
+  transform: skewX(-12deg);
+  animation: screenSweep 5.5s ease-in-out infinite;
+  pointer-events: none;
+}
+.consoleFoot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.9rem 0.35rem 0;
+  color: #4c524a;
+  font-size: 0.62rem;
+  letter-spacing: 0.3em;
+}
+.grille { display: inline-flex; gap: 3px; }
+.grille i {
+  width: 2px;
+  height: 13px;
+  border-radius: 1px;
+  background: #2b302a;
+}
+
+.scrollCue {
+  display: grid;
+  justify-items: center;
+  gap: 0.4rem;
+  padding-bottom: 2.5rem;
+  color: var(--gbs-text-faint);
+  font-size: 0.58rem;
+  letter-spacing: 0.22em;
+  text-decoration: none;
+}
+.scrollCue svg { animation: nudge 2s ease-in-out infinite; }
+
+/* --- Feature row ---------------------------------------------------------- */
+
+.features {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  padding: clamp(3rem, 5vw, 4.5rem) 0;
+  text-align: center;
+}
+.features > div + div { border-left: 1px solid rgb(155 188 15 / 12%); }
+.features svg {
+  display: block;
+  margin: 0 auto;
+  color: var(--phosphor);
+  filter: drop-shadow(0 0 10px rgb(155 188 15 / 30%));
+}
+.features h2 {
+  margin: 1.2rem 0 0.8rem;
+  color: var(--phosphor);
+  font-size: 0.82rem;
+  font-weight: 400;
+  letter-spacing: 0.13em;
+}
+.features p {
+  max-width: 22rem;
+  margin: 0 auto;
+  color: var(--gbs-text-muted);
+  font-size: 0.7rem;
+  line-height: 1.9;
+}
+
+/* --- Featured game -------------------------------------------------------- */
+
+.featured {
+  display: grid;
+  grid-template-columns: minmax(0, 0.72fr) minmax(0, 1.28fr);
+  align-items: center;
+  gap: clamp(2rem, 5vw, 4rem);
+  padding: clamp(3.5rem, 6vw, 5.5rem) 0;
+}
+.featured h2 {
+  margin: 1.1rem 0 1.3rem;
+  font-size: clamp(2rem, 3.4vw, 2.8rem);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+}
+.featured p {
+  margin: 0;
+  color: var(--gbs-text-muted);
+  font-size: 0.82rem;
+  line-height: 1.95;
+}
+.play {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin-top: 1.8rem;
+  padding: 0.85rem 1.4rem;
+  border: 1px solid rgb(155 188 15 / 35%);
+  border-radius: 8px;
+  color: var(--gbs-text);
+  font-size: 0.68rem;
+  letter-spacing: 0.14em;
+  text-decoration: none;
+  transition: background-color 160ms ease, border-color 160ms ease, transform 160ms ease;
+}
+.play:hover {
+  border-color: var(--phosphor);
+  background: rgb(155 188 15 / 10%);
+  transform: translateY(-1px);
+}
+/* A 10:9 Game Boy frame inside a wide panel. The art is the game's real
+   output, so it is letterboxed rather than cropped or upscaled into
+   something the game never draws. */
+.art {
+  position: relative;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  aspect-ratio: 16 / 10;
+  border: 1px solid rgb(155 188 15 / 22%);
+  border-radius: 12px;
+  background:
+    radial-gradient(ellipse at 50% 50%, rgb(155 188 15 / 7%), transparent 70%),
+    #000;
+  box-shadow: 0 30px 70px rgb(0 0 0 / 50%);
+}
+.art img {
+  display: block;
+  width: auto;
+  height: 100%;
+  max-width: 100%;
+  object-fit: contain;
+  image-rendering: pixelated;
+}
+.artTag {
+  position: absolute;
+  top: 0.8rem;
+  left: 0.8rem;
+  padding: 0.3rem 0.55rem;
+  border-radius: 4px;
+  background: rgb(5 8 5 / 78%);
+  color: var(--phosphor);
+  font-size: 0.54rem;
+  letter-spacing: 0.16em;
+}
+
+/* --- Closing statement ---------------------------------------------------- */
+
+.closing {
+  display: grid;
+  grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.15fr);
+  align-items: center;
+  gap: clamp(2rem, 6vw, 5rem);
+  padding: clamp(3.5rem, 6vw, 5.5rem) 0;
+}
+.cart { display: grid; place-items: center; }
+.cart svg { width: min(100%, 320px); height: auto; color: var(--phosphor); filter: drop-shadow(0 0 18px rgb(155 188 15 / 25%)); }
+.closing h2 {
+  margin: 0.9rem 0 1.4rem;
+  font-size: clamp(1.7rem, 3vw, 2.35rem);
+  line-height: 1.28;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+.closing h2 em { display: block; color: var(--phosphor); font-style: normal; }
+.closing p {
+  max-width: 34rem;
+  margin: 0 0 1.2rem;
+  color: var(--gbs-text-muted);
+  font-size: 0.8rem;
+  line-height: 1.95;
+}
+.closing p:last-of-type { margin-bottom: 0; }
+.closing b { color: var(--phosphor); font-weight: 400; }
+
+/* --- Footer --------------------------------------------------------------- */
+
+.footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 2rem 0 2.6rem;
+  color: var(--gbs-text-faint);
+  font-size: 0.62rem;
+  letter-spacing: 0.08em;
+}
+.footerLinks { display: inline-flex; gap: 1.4rem; }
+.footerLinks a { color: var(--gbs-text-muted); text-decoration: none; transition: color 160ms ease; }
+.footerLinks a:hover { color: var(--phosphor); }
+
+/* --- Motion --------------------------------------------------------------- */
+
+@keyframes pulse { 0%, 100% { opacity: 0.35; } 50% { opacity: 1; } }
+@keyframes powerBar { 0%, 70% { opacity: 1; } 71%, 100% { opacity: 0.25; } }
+@keyframes screenSweep { 0%, 18% { left: -24%; opacity: 0; } 42% { opacity: 1; } 65%, 100% { left: 115%; opacity: 0; } }
+@keyframes lineTravel { 0%, 16% { transform: translateX(0); opacity: 0; } 26% { opacity: 1; } 72% { opacity: 1; } 88%, 100% { transform: translateX(560%); opacity: 0; } }
+@keyframes nudge { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(4px); } }
+
+@media (max-width: 900px) {
+  .progress { display: none; }
+  .hero,
+  .featured,
+  .closing { grid-template-columns: 1fr; }
+  .console { justify-self: stretch; max-width: 560px; }
+  .features { grid-template-columns: 1fr; gap: 2.5rem; }
+  .features > div + div { border-left: 0; border-top: 1px solid rgb(155 188 15 / 12%); padding-top: 2.5rem; }
+  .cart { order: 2; }
+}
+
+@media (max-width: 620px) {
+  .nav,
+  .hero,
+  .features,
+  .featured,
+  .closing,
+  .scrollCue,
+  .footer { width: calc(100% - 1.5rem); }
+  .headline { font-size: clamp(1.9rem, 8.5vw, 2.5rem); }
+  .formRow { grid-template-columns: auto minmax(0, 1fr); row-gap: 0.2rem; }
+  .formRow button { grid-column: 1 / -1; width: 100%; }
+  .footer { justify-content: center; text-align: center; }
+}
