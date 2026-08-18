@@ -145,6 +145,13 @@ ${context.source}
 \`\`\``;
 }
 
+/** The service's own words about a refusal, when it gave any. */
+function upstream(error: InstanceType<typeof Anthropic.APIError>): string | undefined {
+  const body = error.error as { error?: { message?: unknown } } | undefined;
+  const message = body?.error?.message;
+  return typeof message === 'string' ? message : undefined;
+}
+
 /** Something a person can act on, from an error that was written for a machine. */
 function explain(error: unknown): string {
   if (error instanceof Anthropic.AuthenticationError) {
@@ -162,6 +169,14 @@ function explain(error: unknown): string {
   // The base class for every non-2xx response, checked last so the specific
   // cases above win.
   if (error instanceof Anthropic.APIError) {
+    // A 4xx is a request the service refused, and it will refuse the same
+    // request again — so "try again" is the one thing not to say. Which refusal
+    // it is lives only in the upstream message: an exhausted balance, a model
+    // that does not exist and a request too large are all 4xx, and a bare
+    // status code sends the reader looking for a bug that is not there.
+    if (error.status !== undefined && error.status >= 400 && error.status < 500) {
+      return `The game service refused the request: ${upstream(error) ?? error.message}`;
+    }
     return `The game service had a problem (${error.status ?? 'no status'}). Try again in a moment.`;
   }
   return error instanceof Error ? error.message : String(error);
