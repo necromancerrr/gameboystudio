@@ -55,7 +55,7 @@ const GAMES = [
     slug: 'ring-out-hosted',
     entry: 'ring-out.ts',
     title: 'Ring Out (hosted)',
-    developer: 'GameBoyStudio',
+    developer: 'GameDex Studio',
     description:
       'The same two-player sumo, running as a hosted game rather than one compiled into the site.',
     players: { min: 2, max: 2 },
@@ -67,7 +67,7 @@ const GAMES = [
     slug: 'drift-hosted',
     entry: 'drift.ts',
     title: 'Drift (hosted)',
-    developer: 'GameBoyStudio',
+    developer: 'GameDex Studio',
     description:
       'One star, one ship, one button that matters — hosted rather than compiled, and it still remembers your best.',
     players: { min: 1, max: 1 },
@@ -149,7 +149,7 @@ for (const game of selected) {
     genre: game.genre,
     screenshots: [],
     license: 'LicenseRef-GameBoyStudio-Original',
-    attribution: 'GameBoyStudio',
+    attribution: 'GameDex Studio',
     sourceUrl: '',
     // The version lives in the URL, so a new version cannot be served from a
     // stale document and rollback is just pointing back here.

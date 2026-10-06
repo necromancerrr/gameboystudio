@@ -67,6 +67,20 @@ await check('a well-formed entry is accepted whole', () => {
   assert.equal(game.saves, true);
 });
 
+await check('legacy first-party credits use the current brand without changing identity', () => {
+  const original = good({ license: 'LicenseRef-GameBoyStudio-Original' });
+  const [game] = accepted(original);
+  assert.equal(game.developer, 'GameDex Studio');
+  assert.equal(game.attribution, 'GameDex Studio');
+  assert.equal(game.license, original.license);
+  assert.equal(game.slug, original.slug);
+  assert.equal(game.frameUrl, original.frameUrl);
+  assert.equal(original.developer, 'GameBoyStudio');
+  const [other] = accepted(good({ developer: 'Another Studio', attribution: 'Original Author' }));
+  assert.equal(other.developer, 'Another Studio');
+  assert.equal(other.attribution, 'Original Author');
+});
+
 await check('optional fields may be absent', () => {
   const entry = good();
   delete entry.description;

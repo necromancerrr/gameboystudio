@@ -80,7 +80,7 @@ function writeManifest(project: Project, spec: GameSpec, entry: string, version:
       {
         slug: project.slug,
         title: spec.title,
-        developer: 'GameBoyStudio',
+        developer: 'GameDex Studio',
         description: `Generated: ${spec.kind}.`,
         entry,
         version,
@@ -89,7 +89,7 @@ function writeManifest(project: Project, spec: GameSpec, entry: string, version:
         saves: spec.saves,
         genre: spec.genre,
         license: 'LicenseRef-GameBoyStudio-Original',
-        attribution: 'GameBoyStudio',
+        attribution: 'GameDex Studio',
       },
       null,
       2,

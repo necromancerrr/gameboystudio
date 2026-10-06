@@ -230,7 +230,9 @@ function validateGame(
     game: {
       slug,
       title,
-      developer,
+      // Older hosted manifests retain the original first-party credit.
+      // Update its display name without migrating game URLs or licenses.
+      developer: developer === 'GameBoyStudio' ? 'GameDex Studio' : developer,
       description: description ?? '',
       year,
       runtime: 'hosted',
@@ -244,7 +246,7 @@ function validateGame(
       genre,
       screenshots,
       license,
-      attribution: attribution ?? '',
+      attribution: attribution === 'GameBoyStudio' ? 'GameDex Studio' : attribution ?? '',
       sourceUrl: sourceUrl ?? '',
       homepageUrl: homepageUrl ?? '',
       // Hosted games sort after the curated list rather than interleaving with
