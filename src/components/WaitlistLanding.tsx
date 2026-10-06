@@ -3,9 +3,9 @@
 /**
  * The early-access landing.
  *
- * Lives on its own route rather than in front of the library: the games here
- * already play, and a waitlist gate over a working product would be a lie the
- * homepage does not need to tell. This page pitches what is *not* shipped yet.
+ * Lives on its own route rather than in front of the studio: the library
+ * already plays. This page explains the creator loop, its experimental status,
+ * and the creator offering that is still being worked out.
  *
  * Two numbers on this page are real or absent. The catalog count comes from
  * the catalog, and there is no "N players joined" counter, because nothing in
@@ -83,14 +83,14 @@ export function WaitlistLanding({ gameCount }: { gameCount: number }) {
         body: JSON.stringify({ email }),
       });
       const body = (await response.json().catch(() => ({}))) as { message?: string };
-      if (!response.ok) throw new Error(body.message || 'Could not register this player yet.');
+      if (!response.ok) throw new Error(body.message || 'Could not join the creator waitlist yet.');
 
       setFormState('success');
-      setMessage(body.message || 'PLAYER REGISTERED — we’ll send the signal when it is ready.');
+      setMessage(body.message || 'You’re on the creator waitlist. We’ll email you with updates.');
       formElement.reset();
     } catch (error) {
       setFormState('error');
-      setMessage(error instanceof Error ? error.message : 'Could not register this player yet.');
+      setMessage(error instanceof Error ? error.message : 'Could not join the creator waitlist yet.');
     }
   }
 
@@ -105,11 +105,11 @@ export function WaitlistLanding({ gameCount }: { gameCount: number }) {
         <span className={styles.progressLight} />
       </div>
 
-      <nav className={`${styles.container} ${styles.nav}`} aria-label="GameBoyStudio">
+      <nav className={`${styles.container} ${styles.nav}`} aria-label="GameDex Studio">
         <Link className={styles.brand} href="/">
           <Mark />
           <span className={styles.brandText}>
-            <b>GAMEBOY</b>
+            <b>GAMEDEX</b>
             <span>STUDIO</span>
           </span>
         </Link>
@@ -127,15 +127,20 @@ export function WaitlistLanding({ gameCount }: { gameCount: number }) {
       <header className={`${styles.container} ${styles.hero}`}>
         <div className={styles.reveal}>
           <p className={styles.eyebrow}>
-            <Caret /> A NEW HOME FOR GAMES
+            <Caret /> START WITH YOUR GAME IDEA
           </p>
           <h1 className={styles.headline}>
-            Games belong somewhere <em>fun again.</em>
+            Describe your game. <em>Make it your own.</em>
           </h1>
           <p className={styles.intro}>
-            Play retro classics, discover original games, and eventually build worlds that only
-            make sense inside <b>GameBoyStudio</b>.
+            Tell <b>GameDex Studio</b> what you want to play. Search the library first,
+            then try creating your own if nothing fits. Play it, ask for a change,
+            and keep shaping it.
           </p>
+
+          <Link className={styles.play} href="/">
+            DESCRIBE YOUR GAME <PlayIcon />
+          </Link>
 
           <form className={styles.form} onSubmit={submit} data-state={formState}>
             <label className="sr-only" htmlFor="waitlist-email">
@@ -158,11 +163,11 @@ export function WaitlistLanding({ gameCount }: { gameCount: number }) {
                   ? 'SENDING…'
                   : formState === 'success'
                     ? 'REGISTERED ✓'
-                    : 'GET EARLY ACCESS →'}
+                    : 'JOIN CREATOR WAITLIST →'}
               </button>
             </div>
             <p className={styles.status} role="status" aria-live="polite">
-              {message || 'Join the waitlist. Be one of the first players.'}
+              {message || 'Get updates on experimental game creation.'}
             </p>
           </form>
 
@@ -182,15 +187,17 @@ export function WaitlistLanding({ gameCount }: { gameCount: number }) {
             <span className={styles.consoleLed} aria-hidden="true" />
             POWER
           </div>
-          <div className={styles.screen}>
-            <video autoPlay muted loop playsInline preload="metadata" aria-hidden="true">
-              <source src="/boot/checkpoint.webm" type="video/webm" />
-            </video>
+          <div className={styles.screen} aria-hidden="true">
+            <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 p-3 text-lcd sm:gap-3 sm:p-4">
+              <Mark size={48} />
+              <span className="text-2xl font-bold tracking-[0.14em] sm:text-3xl">GAMEDEX</span>
+              <span className="text-[10px] tracking-[0.5em]">STUDIO</span>
+            </div>
             <div className={styles.scan} aria-hidden="true" />
             <div className={styles.glare} aria-hidden="true" />
           </div>
           <div className={styles.consoleFoot}>
-            <span>GAMEBOY STUDIO</span>
+            <span>GAMEDEX STUDIO</span>
             <span className={styles.grille} aria-hidden="true">
               <i />
               <i />
@@ -211,18 +218,18 @@ export function WaitlistLanding({ gameCount }: { gameCount: number }) {
       <section id="features" className={`${styles.container} ${styles.features}`}>
         <div className={styles.reveal}>
           <GamepadIcon />
-          <h2>PLAY ANYWHERE.</h2>
-          <p>Browser-based. Controller-ready. Pick up and play, anywhere.</p>
+          <h2>DESCRIBE IT.</h2>
+          <p>Start with an idea in your own words. Find matching games in the playable library.</p>
         </div>
         <div className={styles.reveal}>
           <HeartIcon />
-          <h2>BUILT FOR CONTROLLERS.</h2>
-          <p>Designed from the ground up for real gameplay.</p>
+          <h2>MAKE WHAT’S MISSING.</h2>
+          <p>Nothing fits? Try experimental game creation. AI creation requires configured model access.</p>
         </div>
         <div className={styles.reveal}>
           <StarIcon />
-          <h2>NEW GAMES LIVE HERE.</h2>
-          <p>Original games, fresh ideas, made for GameBoyStudio.</p>
+          <h2>PLAY. CHANGE. REPEAT.</h2>
+          <p>Ask for changes while the last working version stays playable. A failed revision won’t replace it.</p>
         </div>
       </section>
 
@@ -231,7 +238,7 @@ export function WaitlistLanding({ gameCount }: { gameCount: number }) {
       <section className={`${styles.container} ${styles.featured}`}>
         <div className={styles.reveal}>
           <p className={styles.eyebrow}>
-            <Caret /> FEATURED GAME
+            <Caret /> ALREADY IN THE LIBRARY
           </p>
           <h2>DRIFT</h2>
           <p>
@@ -255,21 +262,22 @@ export function WaitlistLanding({ gameCount }: { gameCount: number }) {
           <Cartridge />
         </div>
         <div className={styles.reveal}>
-          <p className={styles.eyebrow}>THIS ISN’T AN EMULATOR.</p>
+          <p className={styles.eyebrow}>CREATOR EARLY ACCESS</p>
           <h2>
-            This is the start of <em>something new.</em>
+            Start with a game. <em>Keep making it yours.</em>
           </h2>
           <p>
-            GameBoyStudio is becoming a place for games made specifically for the browser:
-            controllers, friends in the same room, phones as extra pads, and whatever we invent
-            next.
+            The library is live now. Game creation and revisions are experimental,
+            and what you can make depends on the configured generator. AI creation
+            needs model access; the built-in generator supports a limited set of
+            game types without it.
           </p>
           <p>
-            The best games aren’t behind a download. They’re in a place that gets better over
-            time.
+            Pricing and usage limits are not finalized. The waitlist is for
+            creator updates as the experience develops.
           </p>
           <p>
-            Welcome to <b>GameBoyStudio</b>.
+            Join the waitlist to hear what’s next for <b>GameDex Studio</b>.
           </p>
         </div>
       </section>
@@ -280,13 +288,13 @@ export function WaitlistLanding({ gameCount }: { gameCount: number }) {
         <Link className={styles.brand} href="/">
           <Mark size={26} />
           <span className={styles.brandText}>
-            <b style={{ fontSize: '0.8rem' }}>GAMEBOY</b>
+            <b style={{ fontSize: '0.8rem' }}>GAMEDEX</b>
             <span style={{ fontSize: '0.5rem' }}>STUDIO</span>
           </span>
         </Link>
-        <span>© {new Date().getFullYear()} GameBoyStudio</span>
+        <span>© {new Date().getFullYear()} GameDex Studio</span>
         <span className={styles.footerLinks}>
-          <Link href="/">Library</Link>
+          <Link href="/">Open studio</Link>
           <Link href="/games/drift">Drift</Link>
         </span>
       </footer>

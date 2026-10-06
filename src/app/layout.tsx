@@ -14,11 +14,11 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: {
-    default: "GameBoyStudio",
-    template: "%s — GameBoyStudio",
+    default: "GameDex Studio",
+    template: "%s — GameDex Studio",
   },
   description:
-    "Play Game Boy and Game Boy Color homebrew in your browser. Every game is licensed for redistribution.",
+    "Describe a game, find a match in the playable library, or try experimental game creation. Play and revise while keeping the last working version.",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

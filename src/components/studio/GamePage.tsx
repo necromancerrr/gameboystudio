@@ -80,7 +80,7 @@ function asHostedGame(view: GameView, frameUrl: string): HostedGame {
     genre: [],
     screenshots: [],
     license: 'LicenseRef-GameBoyStudio-Original',
-    attribution: 'GameBoyStudio',
+    attribution: 'GameDex Studio',
     sourceUrl: '',
     homepageUrl: '',
     rank: 0,
@@ -378,7 +378,7 @@ function ShareButton({ id, shareable }: { id: string; shareable: boolean }) {
 function VisitorFooter() {
   return (
     <section className="mt-8" data-testid="visitor">
-      <p className="text-xs text-faint">Someone made this with GameBoyStudio.</p>
+      <p className="text-xs text-faint">Someone made this with GameDex Studio.</p>
       <Ask compact />
     </section>
   );

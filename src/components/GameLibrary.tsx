@@ -44,7 +44,7 @@ export function GameLibrary({
     void loadHostedGames(controller.signal).then((result) => {
       if (controller.signal.aborted) return;
       if (result.games.length > 0) setHosted(result.games);
-      if (result.problem) console.warn('[GameBoyStudio] hosted games:', result.problem);
+      if (result.problem) console.warn('[GameDex Studio] hosted games:', result.problem);
     });
     return () => controller.abort();
   }, []);

@@ -15,16 +15,16 @@ export default function LibraryPage() {
       <header className="mb-4 flex items-start justify-between gap-4 sm:mb-6">
         <div>
           <h1 className="text-xl font-semibold tracking-tight sm:text-2xl">
-            GameBoyStudio
+            GameDex Studio
           </h1>
           <p className="mt-1 text-sm text-muted">
-            {games.length} small games that start the moment you tap. Keyboard,
-            controller, or right here on your phone.
+            Describe your game. Find a library match, or try making your own.
+            {' '}{games.length} games are ready to play.
           </p>
         </div>
 
-        {/* The pitch for what is not built yet lives on its own page. The
-            games here already play, so nothing gates the library. */}
+        {/* Creator updates have their own page; the playable library remains
+            open without joining the waitlist. */}
         <Link
           href="/early-access"
           className="shrink-0 rounded-full border border-hairline px-3 py-1.5 text-xs text-muted transition-colors hover:border-lcd-deep hover:text-lcd"
@@ -48,9 +48,8 @@ export default function LibraryPage() {
       />
 
       <footer className="mt-16 border-t border-hairline pt-6 text-xs text-faint">
-        Every game here is published by its author under a license that permits
-        redistribution. Each game page credits its creator and states its
-        license.
+        Library games credit their creators and include license details on each
+        game page. Experimental creation is separate from the curated library.
       </footer>
     </div>
   );

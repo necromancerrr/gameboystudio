@@ -34,7 +34,7 @@ export function relayUrlIsUsable(): boolean {
   if (window.location.protocol !== 'https:') return true;
   if (RAW.startsWith('wss://')) return true;
   console.error(
-    `[GameBoyStudio] NEXT_PUBLIC_RELAY_URL is "${RAW}", but this page is served ` +
+    `[GameDex Studio] NEXT_PUBLIC_RELAY_URL is "${RAW}", but this page is served ` +
       'over HTTPS. The browser will block an insecure WebSocket, so inviting a ' +
       'player cannot work. Use a wss:// URL.',
   );

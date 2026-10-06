@@ -18,7 +18,7 @@
     "sdk:build": "tsc -p packages/sdk/tsconfig.json",
     "sdk:pack": "cd packages/sdk && npm pack --pack-destination ../../dist-sdk",
     "start": "next start",
-    "verify": "npm run lint && npm run verify:worker && npm run verify:hosted-origin && npm run verify:catalog && npm run verify:native && npm run verify:input && npm run verify:net && npm run verify:hosted && npm run verify:sdk && npm run verify:forge && npm run verify:frame && npm run build && npm run verify:bundles && npm run verify:browser",
+    "verify": "npm run lint && npm run verify:request-search && npm run verify:worker && npm run verify:hosted-origin && npm run verify:catalog && npm run verify:native && npm run verify:input && npm run verify:net && npm run verify:hosted && npm run verify:sdk && npm run verify:forge && npm run verify:frame && npm run build && npm run verify:bundles && npm run verify:brand-http && npm run verify:browser",
     "verify:browser": "node scripts/verify-browser.mjs",
     "verify:bundles": "node scripts/verify-bundles.mjs",
     "verify:catalog": "node scripts/verify-catalog.mjs",
@@ -32,7 +32,10 @@
     "verify:net": "node scripts/verify-net.mjs",
     "verify:relay": "node scripts/verify-relay-origins.mjs",
     "verify:sdk": "node scripts/verify-sdk.mjs",
-    "verify:worker": "tsc --noEmit -p worker/tsconfig.json"
+    "verify:worker": "tsc --noEmit -p worker/tsconfig.json",
+    "verify:request-search": "node scripts/verify-request-search.mjs",
+    "preverify": "npm run sdk:build && npm run forge:build && npm run hosted:build",
+    "verify:brand-http": "node scripts/verify-brand-http.mjs"
   },
   "dependencies": {
     "next": "16.3.0",

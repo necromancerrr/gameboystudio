@@ -3,7 +3,7 @@ import type { Metadata } from 'next';
 import { JoinController } from '@/components/JoinController';
 
 export const metadata: Metadata = {
-  title: 'Join a game — GameBoyStudio',
+  title: 'Join a game',
   description: 'Turn this device into a controller for a game on another screen.',
   // A controller page has nothing to offer a search engine, and a room code in
   // an index would be a capability sitting in public.

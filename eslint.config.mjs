@@ -24,6 +24,9 @@ const eslintConfig = defineConfig([
     // Generated games. Each is a real SDK project with its own node_modules,
     // and none of it is this repository's source.
     ".forge/**",
+    // Outputs built by preverify; lint their source rather than generated bundles.
+    "packages/*/dist/**",
+    "hosted-origin/public/games/**",
   ]),
 ]);
 

@@ -99,7 +99,7 @@ export default async function GamePage({
               data-testid="original-badge"
               className="mb-2 font-mono text-[11px] tracking-[0.14em] text-lcd uppercase"
             >
-              GameBoyStudio Original
+              GameDex Studio Original
             </p>
           ) : null}
           <h1 className="text-2xl font-semibold tracking-tight">{game.title}</h1>
@@ -184,7 +184,7 @@ export default async function GamePage({
                 About this game
               </h2>
               <p className="mt-3 text-sm text-muted">
-                Made by GameBoyStudio, for GameBoyStudio. It runs in the browser
+                Made by GameDex Studio, for GameDex Studio. It runs in the browser
                 with nothing to install and nothing to sign up for, like
                 everything else in the library.
               </p>
@@ -218,7 +218,7 @@ export default async function GamePage({
                 ) : null}
               </dl>
               <p className="mt-3 text-xs text-faint">
-                Distributed under the terms above. GameBoyStudio hosts only ROMs
+                Distributed under the terms above. GameDex Studio hosts only ROMs
                 whose license permits redistribution.
               </p>
             </>

@@ -3,9 +3,9 @@ import { WaitlistLanding } from '@/components/WaitlistLanding';
 import { getAllGames } from '@/catalog';
 
 export const metadata: Metadata = {
-  title: 'Early access',
+  title: 'Creator early access',
   description:
-    'GameBoyStudio is becoming a console for the browser. Join the waitlist for original games, shared screens, and what comes next.',
+    'GameDex Studio starts with your game idea. Explore the live library and experimental creation, then join the waitlist for creator updates.',
 };
 
 export default function EarlyAccessPage() {

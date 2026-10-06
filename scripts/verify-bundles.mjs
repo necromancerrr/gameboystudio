@@ -27,7 +27,7 @@ const MARKERS = {
 };
 
 /** A retro page and a native page, to compare what each one pulls in. */
-const RETRO_PAGE = 'games/tobutobugirl.html';
+const RETRO_PAGE = 'games/tobutobugirldeluxe.html';
 const NATIVE_PAGE = 'games/drift.html';
 
 if (!fs.existsSync(CHUNK_DIR)) {

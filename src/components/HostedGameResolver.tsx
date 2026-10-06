@@ -29,7 +29,7 @@ export function HostedGameResolver({ slug }: { slug: string }) {
       if (controller.signal.aborted) return;
       const game = result.games.find((candidate) => candidate.slug === slug);
       setState(game ? { phase: 'found', game } : { phase: 'missing' });
-      if (result.problem) console.warn('[GameBoyStudio] hosted games:', result.problem);
+      if (result.problem) console.warn('[GameDex Studio] hosted games:', result.problem);
     });
     return () => controller.abort();
   }, [slug]);

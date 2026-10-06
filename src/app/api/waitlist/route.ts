@@ -27,20 +27,20 @@ export async function POST(request: Request) {
           ? { authorization: `Bearer ${process.env.GBS_WAITLIST_TOKEN}` }
           : {}),
       },
-      body: JSON.stringify({ email, source: 'gameboystudio-landing' }),
+      body: JSON.stringify({ email, source: 'gamedex-landing' }),
       cache: 'no-store',
     });
 
     if (!response.ok) {
       console.error('[waitlist] endpoint rejected signup', response.status);
-      return NextResponse.json({ message: 'Could not register this player yet.' }, { status: 502 });
+      return NextResponse.json({ message: 'Could not save your signup yet.' }, { status: 502 });
     }
 
     return NextResponse.json({
-      message: 'PLAYER REGISTERED — we’ll send the access signal when it is ready.',
+      message: 'You’re on the list. We’ll email you when early access is ready.',
     });
   } catch (error) {
     console.error('[waitlist] endpoint unavailable', error);
-    return NextResponse.json({ message: 'Could not register this player yet.' }, { status: 502 });
+    return NextResponse.json({ message: 'Could not save your signup yet.' }, { status: 502 });
   }
 }

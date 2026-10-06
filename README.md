@@ -1,9 +1,18 @@
-# GameBoyStudio
+# GameDex Studio
 
-Play Game Boy and Game Boy Color homebrew in the browser. Pick a game, it starts
-immediately — no ROM upload, no plugin, keyboard or controller.
+Describe the game you want to play. GameDex Studio searches its playable library
+first, then offers experimental game creation when nothing fits. Play, ask for a
+change, and keep the last working version while the next revision is checked.
 
-**Live: https://gameboy-jet.vercel.app**
+For players with an idea and creators who want to keep shaping it. The library
+includes browser originals and licensed Game Boy, Game Boy Color, and Game Boy
+Advance homebrew.
+
+**Existing deployment: https://gameboy-jet.vercel.app**
+
+The display brand is GameDex Studio. Existing deployment URLs, package scopes,
+environment variables, storage keys, and license identifiers retain their legacy
+names for compatibility.
 
 > **Deploying?** Read RELEASE_GBA.md first. The hosted-games Worker must be
 > deployed before the app, and `npm run hosted:deploy` is not safe to run on its
@@ -11,22 +20,43 @@ immediately — no ROM upload, no plugin, keyboard or controller.
 
 ## Status
 
-The core loop works: **discover → open → connect controller → play**.
+The product loop is **describe → search the library → play a match or choose
+creation → play → request a change → play again**.
 
-- 20 games (12 Game Boy, 8 Game Boy Color)
-- Real emulation via [binjgb](https://github.com/binji/binjgb) compiled to WebAssembly
-- Keyboard and Gamepad API input
-- Battery saves persist across reloads (14 of the 20 games have save RAM)
-- Pause, reset, mute, fullscreen
+- **Playable library:** curated browser originals and redistributable homebrew,
+  with keyboard, controller, and touch support where each game supports it
+- **Experimental creation:** Forge builds and checks a new game or revision. A
+  failed revision never replaces the last working game
+- **Configuration-dependent AI:** configured model access enables AI generation.
+  Without it, the built-in synthesizer supports a limited set of game types;
+  that mode is not AI generation
+- **Creator offering:** pricing and usage limits are not finalized. The
+  early-access form collects interest; it is not a subscription checkout
+
+Game creation is a prototype that needs a Node.js host with child-process support
+and writable project storage. A deployed library alone does not establish that
+creation is configured or working on that deployment.
 
 ## Getting started
 
 ```bash
 npm install
+npm run sdk:build
+npm run forge:build
 npm run dev
 ```
 
 Then open http://localhost:3000.
+
+For repeatable local creation without model calls, run
+`GBS_GENERATOR=synthesizer npm run dev`. Forge selects the model generator when
+`ANTHROPIC_API_KEY` or `ANTHROPIC_AUTH_TOKEN` is available; `GBS_GENERATOR` can
+explicitly select `synthesizer` or `model`. Keep credentials server-side.
+
+Generated projects are stored under `.forge` by default (`GBS_FORGE_ROOT`
+overrides it). The default creation check builds and bundles the game;
+`GBS_FORGE_FULL_CHECK=1` also runs the browser conformance checks and requires
+Chrome. Passing the default build gate is not a guarantee of gameplay quality.
 
 ## Scripts
 
@@ -34,13 +64,20 @@ Then open http://localhost:3000.
 | --- | --- |
 | `npm run dev` | Development server |
 | `npm run build` | Production build |
+| `npm run lint` | ESLint checks |
+| `npm run verify:request-search` | Library-first request matching, relevance, and no-generation checks |
+| `npm run verify:forge` | Creation, revision, and last-working-version checks |
 | `npm run verify:catalog` | Boots every ROM, checks input reaches the core, and round-trips every battery save |
+| `npm run verify` | Full verification pipeline, including the production build and browser checks |
 
 ## Early-access waitlist
 
-The early-access landing lives at `/early-access`, linked from the library
-header. `/` stays the library: the games here already play, so nothing gates
-them. Signups post to `/api/waitlist`, which forwards `{ email, source }` to
+The creator early-access landing lives at `/early-access`, linked from the studio
+header. `/` opens the game-description flow and playable library; neither is
+gated by the waitlist. The landing distinguishes experimental creation from the
+live library and does not promise pricing or monthly quotas.
+
+Signups post to `/api/waitlist`, which forwards `{ email, source }` to
 whatever capture service is configured:
 
 | Variable | Required | What it does |
@@ -89,18 +126,24 @@ No copyrighted commercial ROMs are included, and none will be.
 
 ## Architecture
 
-Emulator specifics sit behind a small adapter so the UI never talks to a core
-directly, and so other consoles can be added later.
+The library and creation loop share the player surface. Emulator specifics sit
+behind a small adapter so the UI never talks to a core directly. Generated games
+live separately from the curated catalog, with a play pointer that only advances
+after a revision passes its configured checks.
 
 ```
 src/
-  app/         routes — library and /games/[slug]
+  app/         studio, /games/[slug], /g/[id], /early-access, and API routes
   catalog/     game data + queries (committed, not fetched at build time)
-  components/  GameBoyPlayer, GameCard
+  components/  library, retro/native/hosted players, and studio creation UI
   emulation/
     core/      console-agnostic EmulatorAdapter contract
     gameboy/   binjgb adapter + module loader
   input/       keyboard.ts, gamepad.ts -> logical buttons
+  lib/         server-side Forge bridge
+packages/
+  forge/       generation, revision checks, and last-working play pointer
+  sdk/         hosted-game runtime and creator tooling
 ```
 
 binjgb is not published to npm, so its WebAssembly artifacts are vendored in

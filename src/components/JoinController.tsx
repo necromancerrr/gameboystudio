@@ -132,7 +132,7 @@ export function JoinController() {
   if (!RELAY_URL) {
     return (
       <Centered title="Joining is not available">
-        <p>This copy of GameBoyStudio has no room relay configured.</p>
+        <p>This copy of GameDex Studio has no room relay configured.</p>
       </Centered>
     );
   }
