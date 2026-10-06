@@ -3,7 +3,7 @@ import { getAllGames } from '@/catalog';
 import { WaitlistLanding } from './WaitlistLanding';
 
 export const betaMetadata: Metadata = {
-  title: 'Beta early access',
+  title: { absolute: 'Beta early access — GameDex Studio' },
   description: 'GameDex Studio is in beta, ahead of its full launch. Explore the playable game library and see what is coming next. Public AI creation is not available yet.',
 };
 

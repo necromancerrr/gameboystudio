@@ -33,6 +33,7 @@ try {
     assert.equal(response.status, 200, route);
     const html = await response.text();
     assert(html.includes('GameDex'), route);
+    assert(/<title>[^<]*GameDex/.test(html), 'every public route retains the brand in its title');
     assert(!html.includes('/boot/checkpoint.webm'), route);
     assert(!html.includes('>GameBoyStudio<'), route);
     if (route === '/' || route === '/early-access') {
