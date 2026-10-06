@@ -53,7 +53,7 @@ export function HostedGameResolver({ slug }: { slug: string }) {
         <p className="text-sm text-muted">
           It may have been removed, or the link may be wrong.
         </p>
-        <Link href="/" className="text-sm text-lcd underline underline-offset-4">
+        <Link href="/library" className="text-sm text-lcd underline underline-offset-4">
           Back to the library
         </Link>
       </main>
@@ -62,7 +62,7 @@ export function HostedGameResolver({ slug }: { slug: string }) {
 
   return (
     <main className="mx-auto w-full max-w-4xl flex-1 px-5 py-6 sm:px-8 sm:py-10">
-      <Link href="/" className="text-sm text-muted transition-colors hover:text-foreground">
+      <Link href="/library" className="text-sm text-muted transition-colors hover:text-foreground">
         ← Library
       </Link>
       <div className="mt-4">

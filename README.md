@@ -1,12 +1,11 @@
 # GameDex Studio
 
-Describe the game you want to play. GameDex Studio searches its playable library
-first, then offers experimental game creation when nothing fits. Play, ask for a
-change, and keep the last working version while the next revision is checked.
+GameDex Studio is in beta, ahead of the full production launch. The homepage
+and `/early-access` share the beta early-access landing. The playable library is
+at `/library`, with existing `/games/[slug]` links and browser saves preserved.
 
-For players with an idea and creators who want to keep shaping it. The library
-includes browser originals and licensed Game Boy, Game Boy Color, and Game Boy
-Advance homebrew.
+Public AI creation is not available yet. The local Forge prototype below is
+separate from the public beta and requires its own runtime and configuration.
 
 **Existing deployment: https://gameboy-jet.vercel.app**
 
@@ -20,8 +19,9 @@ names for compatibility.
 
 ## Status
 
-The product loop is **describe → search the library → play a match or choose
-creation → play → request a change → play again**.
+The intended creator loop is **describe → search the library → play a match or
+choose creation → play → request a change → play again**. It is not the public
+beta’s current offering.
 
 - **Playable library:** curated browser originals and redistributable homebrew,
   with keyboard, controller, and touch support where each game supports it
@@ -72,10 +72,11 @@ Chrome. Passing the default build gate is not a guarantee of gameplay quality.
 
 ## Early-access waitlist
 
-The creator early-access landing lives at `/early-access`, linked from the studio
-header. `/` opens the game-description flow and playable library; neither is
-gated by the waitlist. The landing distinguishes experimental creation from the
-live library and does not promise pricing or monthly quotas.
+The beta early-access landing is the homepage (`/`) and remains available at
+`/early-access`. `/library` keeps the playable catalog open without a signup.
+The landing labels public AI creation as unavailable and does not promise a
+launch date, pricing, or monthly quotas. When capture is unconfigured, it shows
+an unavailable notice instead of an email form.
 
 Signups post to `/api/waitlist`, which forwards `{ email, source }` to
 whatever capture service is configured:

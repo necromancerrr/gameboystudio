@@ -18,7 +18,7 @@ export const metadata: Metadata = {
     template: "%s — GameDex Studio",
   },
   description:
-    "Describe a game, find a match in the playable library, or try experimental game creation. Play and revise while keeping the last working version.",
+    "GameDex Studio is in beta. Explore playable games while AI creation is developed ahead of the full launch.",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

@@ -3,9 +3,9 @@
 /**
  * The early-access landing.
  *
- * Lives on its own route rather than in front of the studio: the library
- * already plays. This page explains the creator loop, its experimental status,
- * and the creator offering that is still being worked out.
+ * Introduces the public beta and links to the playable library. Creation and
+ * revisions are still in development, so this page does not offer them as
+ * available features. Signup is shown only when its endpoint is configured.
  *
  * Two numbers on this page are real or absent. The catalog count comes from
  * the catalog, and there is no "N players joined" counter, because nothing in
@@ -19,7 +19,13 @@ import styles from './WaitlistLanding.module.css';
 
 type FormState = 'idle' | 'submitting' | 'success' | 'error';
 
-export function WaitlistLanding({ gameCount }: { gameCount: number }) {
+export function WaitlistLanding({
+  gameCount,
+  signupEnabled = false,
+}: {
+  gameCount: number;
+  signupEnabled?: boolean;
+}) {
   const rootRef = useRef<HTMLDivElement>(null);
   const [formState, setFormState] = useState<FormState>('idle');
   const [message, setMessage] = useState('');
@@ -65,7 +71,7 @@ export function WaitlistLanding({ gameCount }: { gameCount: number }) {
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (formState === 'submitting') return;
+    if (!signupEnabled || formState === 'submitting') return;
 
     // Captured before the first await: currentTarget is nulled once the event
     // finishes dispatching, so reading it after the fetch would throw.
@@ -83,21 +89,21 @@ export function WaitlistLanding({ gameCount }: { gameCount: number }) {
         body: JSON.stringify({ email }),
       });
       const body = (await response.json().catch(() => ({}))) as { message?: string };
-      if (!response.ok) throw new Error(body.message || 'Could not join the creator waitlist yet.');
+      if (!response.ok) throw new Error(body.message || 'Could not join the beta waitlist yet.');
 
       setFormState('success');
-      setMessage(body.message || 'You’re on the creator waitlist. We’ll email you with updates.');
+      setMessage(body.message || 'You’re on the beta waitlist. We’ll email you with updates.');
       formElement.reset();
     } catch (error) {
       setFormState('error');
-      setMessage(error instanceof Error ? error.message : 'Could not join the creator waitlist yet.');
+      setMessage(error instanceof Error ? error.message : 'Could not join the beta waitlist yet.');
     }
   }
 
   const busy = formState === 'submitting' || formState === 'success';
 
   return (
-    <div ref={rootRef} className={styles.shell}>
+    <div ref={rootRef} className={styles.shell} data-testid="beta-landing">
       <div className={styles.noise} aria-hidden="true" />
       <div className={styles.progress} aria-hidden="true">
         <span className={styles.progressTrack} />
@@ -127,54 +133,62 @@ export function WaitlistLanding({ gameCount }: { gameCount: number }) {
       <header className={`${styles.container} ${styles.hero}`}>
         <div className={styles.reveal}>
           <p className={styles.eyebrow}>
-            <Caret /> START WITH YOUR GAME IDEA
+            <Caret /> WELCOME TO THE EARLY BETA
           </p>
           <h1 className={styles.headline}>
-            Describe your game. <em>Make it your own.</em>
+            Play the beta. <em>See what’s next.</em>
           </h1>
           <p className={styles.intro}>
-            Tell <b>GameDex Studio</b> what you want to play. Search the library first,
-            then try creating your own if nothing fits. Play it, ask for a change,
-            and keep shaping it.
+            Explore the playable library from <b>GameDex Studio</b>. This is an
+            early beta: you can browse and play games now. AI game creation and
+            revisions are not yet available in the public beta.
           </p>
 
-          <Link className={styles.play} href="/">
-            DESCRIBE YOUR GAME <PlayIcon />
+          <Link className={styles.play} href="/library">
+            Explore the beta <PlayIcon />
           </Link>
 
-          <form className={styles.form} onSubmit={submit} data-state={formState}>
-            <label className="sr-only" htmlFor="waitlist-email">
-              Your email address
-            </label>
-            <div className={styles.formRow}>
-              <MailIcon />
-              <input
-                id="waitlist-email"
-                name="email"
-                type="email"
-                inputMode="email"
-                autoComplete="email"
-                placeholder="you@email.com"
-                required
-                disabled={busy}
-              />
-              <button type="submit" disabled={busy}>
-                {formState === 'submitting'
-                  ? 'SENDING…'
-                  : formState === 'success'
-                    ? 'REGISTERED ✓'
-                    : 'JOIN CREATOR WAITLIST →'}
-              </button>
+          {signupEnabled ? (
+            <form className={styles.form} onSubmit={submit} data-state={formState}>
+              <label className="sr-only" htmlFor="waitlist-email">
+                Your email address
+              </label>
+              <div className={styles.formRow}>
+                <MailIcon />
+                <input
+                  id="waitlist-email"
+                  name="email"
+                  type="email"
+                  inputMode="email"
+                  autoComplete="email"
+                  placeholder="you@email.com"
+                  required
+                  disabled={busy}
+                />
+                <button type="submit" disabled={busy}>
+                  {formState === 'submitting'
+                    ? 'SENDING…'
+                    : formState === 'success'
+                      ? 'REGISTERED ✓'
+                      : 'JOIN BETA WAITLIST →'}
+                </button>
+              </div>
+              <p className={styles.status} role="status" aria-live="polite">
+                {message || 'Get beta updates as GameDex Studio develops.'}
+              </p>
+            </form>
+          ) : (
+            <div className={styles.form} data-testid="signup-unavailable">
+              <p className={styles.status}>
+                Email signup is not connected yet. You can still explore the playable beta.
+              </p>
             </div>
-            <p className={styles.status} role="status" aria-live="polite">
-              {message || 'Get updates on experimental game creation.'}
-            </p>
-          </form>
+          )}
 
           {/* Deliberately not a signup counter: nothing here knows how many
               people have joined, and inventing the number is not an option.
               The catalog size is true and it is the better invitation. */}
-          <Link className={styles.proof} href="/">
+          <Link className={styles.proof} href="/library">
             <span className={styles.proofDot} aria-hidden="true" />
             <span>
               <b>{gameCount} GAMES</b> PLAYABLE RIGHT NOW →
@@ -218,18 +232,18 @@ export function WaitlistLanding({ gameCount }: { gameCount: number }) {
       <section id="features" className={`${styles.container} ${styles.features}`}>
         <div className={styles.reveal}>
           <GamepadIcon />
-          <h2>DESCRIBE IT.</h2>
-          <p>Start with an idea in your own words. Find matching games in the playable library.</p>
+          <h2>EXPLORE THE LIBRARY.</h2>
+          <p>Browse the playable collection and find a game you want to try.</p>
         </div>
         <div className={styles.reveal}>
           <HeartIcon />
-          <h2>MAKE WHAT’S MISSING.</h2>
-          <p>Nothing fits? Try experimental game creation. AI creation requires configured model access.</p>
+          <h2>PLAY IN YOUR BROWSER.</h2>
+          <p>Open a game from the library and start playing. The beta is ready to explore.</p>
         </div>
         <div className={styles.reveal}>
           <StarIcon />
-          <h2>PLAY. CHANGE. REPEAT.</h2>
-          <p>Ask for changes while the last working version stays playable. A failed revision won’t replace it.</p>
+          <h2>A STUDIO IN PROGRESS.</h2>
+          <p>AI game creation and revisions are still in development and unavailable in the public beta.</p>
         </div>
       </section>
 
@@ -262,23 +276,20 @@ export function WaitlistLanding({ gameCount }: { gameCount: number }) {
           <Cartridge />
         </div>
         <div className={styles.reveal}>
-          <p className={styles.eyebrow}>CREATOR EARLY ACCESS</p>
+          <p className={styles.eyebrow}>EARLY ACCESS</p>
           <h2>
-            Start with a game. <em>Keep making it yours.</em>
+            The library is live. <em>The studio is still growing.</em>
           </h2>
           <p>
-            The library is live now. Game creation and revisions are experimental,
-            and what you can make depends on the configured generator. AI creation
-            needs model access; the built-in generator supports a limited set of
-            game types without it.
+            Start with the games you can play today. This public beta gives you
+            an early look at <b>GameDex Studio</b> while the creator experience
+            is still being developed.
           </p>
           <p>
-            Pricing and usage limits are not finalized. The waitlist is for
-            creator updates as the experience develops.
+            AI game creation and revisions are not available here yet. We’ll
+            share more as the studio takes shape.
           </p>
-          <p>
-            Join the waitlist to hear what’s next for <b>GameDex Studio</b>.
-          </p>
+          {signupEnabled && <p>Join the beta waitlist above for updates.</p>}
         </div>
       </section>
 
@@ -294,7 +305,7 @@ export function WaitlistLanding({ gameCount }: { gameCount: number }) {
         </Link>
         <span>© {new Date().getFullYear()} GameDex Studio</span>
         <span className={styles.footerLinks}>
-          <Link href="/">Open studio</Link>
+          <Link href="/library">Beta library</Link>
           <Link href="/games/drift">Drift</Link>
         </span>
       </footer>

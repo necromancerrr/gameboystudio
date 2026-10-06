@@ -28,13 +28,26 @@ try {
   }
   assert(ready, output);
 
-  for (const route of ['/', '/early-access', '/games/drift', '/games/tobutobugirldeluxe', '/join']) {
+  for (const route of ['/', '/early-access', '/library', '/games/drift', '/games/tobutobugirldeluxe', '/join']) {
     const response = await fetch(`${origin}${route}`);
     assert.equal(response.status, 200, route);
     const html = await response.text();
     assert(html.includes('GameDex'), route);
     assert(!html.includes('/boot/checkpoint.webm'), route);
     assert(!html.includes('>GameBoyStudio<'), route);
+    if (route === '/' || route === '/early-access') {
+      assert(html.includes('data-testid="beta-landing"'), 'root and early access must share the beta landing');
+      assert(html.includes('data-testid="signup-unavailable"'), 'unconfigured signup must be explicit');
+      assert(!html.includes('id="waitlist-email"'), 'do not offer a form that cannot save');
+      assert(html.includes('href="/library"'), 'landing must lead to the playable beta');
+      assert(!html.includes('data-testid="ask-input"'), 'landing must not expose broken creation');
+    }
+    if (route === '/library') {
+      assert(html.includes('data-testid="library-search"'), 'library search remains available');
+      assert(!html.includes('data-testid="ask-input"'), 'public beta must not promote broken generation');
+      assert(html.includes('href="/games/drift"'), 'existing games remain directly accessible');
+    }
+    if (route.startsWith('/games/')) assert(html.includes('href="/library"'), 'game back links must reach the library');
     console.log('PASS brand and route', route);
   }
 

@@ -550,7 +550,7 @@ try {
   console.log('Library:');
 
   await check('the library lists every game, Originals included', async () => {
-    await page.goto(`${base}/`);
+    await page.goto(`${base}/library`);
     const tiles = await page.evaluate(
       `[...document.querySelectorAll('[data-testid="library-grid"] li h3')].map((h) => h.textContent)`,
     );
@@ -584,7 +584,7 @@ try {
   });
 
   await check('search still finds a retro game', async () => {
-    await page.goto(`${base}/`);
+    await page.goto(`${base}/library`);
     await page.evaluate(`(() => {
       const input = document.querySelector('[data-testid="library-search"]');
       const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
@@ -1165,7 +1165,7 @@ try {
   });
 
   await check('Continue remembers what was played', async () => {
-    await page.goto(`${base}/`);
+    await page.goto(`${base}/library`);
     await sleep(700);
     const shelf = await page.evaluate(
       `[...document.querySelectorAll('[data-testid="continue-shelf"] h3')].map((h) => h.textContent)`,
@@ -1199,7 +1199,7 @@ try {
     })()`);
 
     await check('a hosted game appears in the library without being compiled in', async () => {
-      await page.goto(`${base}/`);
+      await page.goto(`${base}/library`);
       const deadline = Date.now() + 8000;
       for (;;) {
         const titles = await page.evaluate(

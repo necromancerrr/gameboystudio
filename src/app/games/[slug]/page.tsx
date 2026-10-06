@@ -65,7 +65,7 @@ export default async function GamePage({
   return (
     <div className="mx-auto w-full max-w-4xl flex-1 px-6 py-8 sm:px-8">
       <Link
-        href="/"
+        href="/library"
         className="inline-flex items-center gap-1.5 text-sm text-muted transition-colors hover:text-foreground"
       >
         <span aria-hidden="true">&larr;</span> Library

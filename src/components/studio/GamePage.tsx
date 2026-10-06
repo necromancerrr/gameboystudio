@@ -126,8 +126,8 @@ export function GamePage({ id }: { id: string }) {
     return (
       <p className="py-16 text-center text-sm text-muted">
         That game is not here.{' '}
-        <Link href="/" className="text-lcd underline underline-offset-4">
-          Ask for one
+        <Link href="/library" className="text-lcd underline underline-offset-4">
+          Browse the beta library
         </Link>
         .
       </p>
